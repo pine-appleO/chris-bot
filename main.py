@@ -177,18 +177,21 @@ def handle_message(event):
     text = event.message.text.strip()
     now  = datetime.now(JST)
 
-    if text in ["おはよう", "朝", "morning"]:
+    def match(keywords):
+        return any(text.startswith(k) or text == k for k in keywords)
+
+    if match(["おはよう", "朝", "morning"]):
         reply = build_morning_message()
-    elif text in ["天気", "weather"]:
+    elif match(["天気", "weather"]):
         reply = get_weather(city_id=1848354, city_name="横浜") + "\n" + get_weather(lat=35.4282, lon=139.9987, city_name="袖ヶ浦のぞみ野")
-    elif text in ["インスタ", "instagram", "IG"]:
+    elif match(["インスタ", "instagram", "IG"]):
         reply = get_instagram_yesterday()
-    elif text in ["月報", "レポート", "report"]:
+    elif match(["月報", "レポート", "report"]):
         reply = build_monthly_report()
-    elif text in ["タスク", "todo", "今日"]:
+    elif match(["タスク", "todo", "今日"]):
         tasks = WEEKLY_TASKS.get(now.weekday(), [])
         reply = "今日のタスク:\n" + "\n".join(f"• {t}" for t in tasks)
-    elif text in ["ヘルプ", "help", "使い方"]:
+    elif match(["ヘルプ", "help", "使い方"]):
         reply = ("📖 使い方\n「おはよう」→ 朝のまとめ\n「天気」→ 横浜・袖ヶ浦の天気\n"
                  "「インスタ」→ 昨日のInstagram\n「タスク」→ 今日のToDoリスト\n「月報」→ 今月のまとめ")
     else:
@@ -199,11 +202,4 @@ def handle_message(event):
             ReplyMessageRequest(reply_token=event.reply_token, messages=[TextMessage(text=reply)])
         )
 
-@app.route("/")
-def index():
-    return "Chris 稼働中 ✅"
-
-if __name__ == "__main__":
-    threading.Thread(target=run_scheduler, daemon=True).start()
-    port = int(os.environ.get("PORT", 8080))
     app.run(host="0.0.0.0", port=port)
