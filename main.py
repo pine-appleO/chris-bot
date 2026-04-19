@@ -28,6 +28,11 @@ IG_TOKEN    = os.environ.get("INSTAGRAM_ACCESS_TOKEN", "")
 IG_USER_ID  = os.environ.get("INSTAGRAM_USER_ID", "")
 GA4_PROPERTY_ID = os.environ.get("GA4_PROPERTY_ID", "313654685")
 GA4_SERVICE_ACCOUNT_JSON = os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON", "")
+YOUTUBE_API_KEY = os.environ.get("YOUTUBE_API_KEY", "")
+YOUTUBE_CHANNELS = {
+    "yokohamalofichill": "UCYfWhwYkK_UKLCC772OY_xQ",
+    "pinea_ppleO": "UCDXLRuSiPGk1kR_vq9C_iag",
+}
 
 configuration = Configuration(access_token=LINE_TOKEN)
 handler = WebhookHandler(LINE_SECRET)
@@ -129,6 +134,25 @@ def get_monthly_ig_summary():
     except Exception:
         return "📱 Instagram 取得失敗"
 
+# ── YouTube ───────────────────────────────────────────────────────
+def get_youtube_stats():
+    if not YOUTUBE_API_KEY:
+        return "🎬 YouTube APIキー未設定"
+    try:
+        lines = ["🎬 YouTube チャンネル"]
+        for name, channel_id in YOUTUBE_CHANNELS.items():
+            url = (f"https://www.googleapis.com/youtube/v3/channels"
+                   f"?part=statistics&id={channel_id}&key={YOUTUBE_API_KEY}")
+            r = requests.get(url, timeout=5).json()
+            stats = r["items"][0]["statistics"]
+            subs  = int(stats["subscriberCount"])
+            views = int(stats["viewCount"])
+            videos = int(stats["videoCount"])
+            lines.append(f"  @{name}\n  👥 {subs:,}人  👁️ {views:,}回  📹 {videos}本")
+        return "\n".join(lines)
+    except Exception as e:
+        return f"🎬 YouTube 取得失敗: {e}"
+
 # ── GA4 ───────────────────────────────────────────────────────────
 def get_ga4_yesterday():
     if not GA4_SERVICE_ACCOUNT_JSON:
@@ -190,6 +214,7 @@ def build_morning_message():
 
     ig   = get_instagram_yesterday()
     ga4  = get_ga4_yesterday()
+    yt   = get_youtube_stats()
     fact = BEEF_FACTS[BEEF_FACT_IDX[0] % len(BEEF_FACTS)]
     BEEF_FACT_IDX[0] += 1
 
@@ -202,6 +227,7 @@ def build_morning_message():
             f"━━━ 今日のタスク ━━━\n{task_text}\n\n"
             f"━━━ 昨日のインスタ ━━━\n{ig}\n\n"
             f"━━━ 昨日のHP ━━━\n{ga4}\n\n"
+            f"━━━ YouTube ━━━\n{yt}\n\n"
             f"━━━ 今日の牛ネタ 🥩 ━━━\n{fact}\n\n"
             f"今日もよろしく！🏝️")
 
@@ -297,6 +323,8 @@ def handle_message(event):
         reply = get_instagram_yesterday()
     elif match(["HP", "ホームページ", "GA4", "サイト"]):
         reply = get_ga4_yesterday()
+    elif match(["YouTube", "ユーチューブ", "youtube"]):
+        reply = get_youtube_stats()
     elif match(["月報", "レポート", "report"]):
         reply = build_monthly_report()
     elif match(["タスク", "todo", "今日"]):
