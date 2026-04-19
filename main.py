@@ -87,9 +87,11 @@ def add_store_visit(date_str, time_str):
         body={"values": [[date_str, time_str]]}
     ).execute()
 
-def delete_store_visit(date_str):
+def delete_store_visit(index):
     visits = get_store_visits()
-    new_visits = [v for v in visits if v[0] != date_str]
+    if index < 1 or index > len(visits):
+        return False
+    new_visits = [v for i, v in enumerate(visits) if i != index - 1]
     svc = _sheets_service()
     svc.spreadsheets().values().clear(
         spreadsheetId=GOOGLE_SHEET_ID, range=f"{SHEET_TAB}!A:B"
@@ -101,6 +103,7 @@ def delete_store_visit(date_str):
             valueInputOption="RAW",
             body={"values": new_visits}
         ).execute()
+    return True
 
 def add_memo(text):
     now = datetime.now(JST).strftime("%Y-%m-%d %H:%M")
@@ -554,22 +557,20 @@ def handle_message(event):
         if not visits:
             reply = "📅 登録済みの予定はないよ！"
         else:
-            lines = [f"  {v[0]} {v[1] if len(v)>1 else ''}" for v in visits]
-            reply = "📅 登録済みの予定\n" + "\n".join(lines)
+            lines = "\n".join(f"  {i+1}. {v[0]} {v[1] if len(v)>1 else ''}" for i, v in enumerate(visits))
+            reply = f"📅 登録済みの予定\n\n{lines}\n\n削除は「予定削除2」で！"
     elif text.startswith("予定削除"):
-        parts = text.split()
-        if len(parts) >= 2:
-            date_str = _parse_visit_date(parts[1])
-            if date_str:
-                try:
-                    delete_store_visit(date_str)
-                    reply = f"📅 {date_str} の予定を削除したよ！"
-                except Exception as e:
-                    reply = f"📅 削除失敗: {e}"
-            else:
-                reply = "📅 日付の形式は「4/25」で送って！\n例：「予定削除 4/25」"
+        num_str = text.replace("予定削除", "").strip()
+        num_str = num_str.translate(str.maketrans("０１２３４５６７８９", "0123456789"))
+        if num_str.isdigit():
+            idx = int(num_str)
+            try:
+                success = delete_store_visit(idx)
+                reply = f"📅 {idx}番の予定を削除したよ！🍍" if success else "📅 その番号の予定はないよ！"
+            except Exception as e:
+                reply = f"📅 削除失敗: {e}"
         else:
-            reply = "📅 フォーマット：「予定削除 4/25」"
+            reply = "📅 番号で指定してね！\n例：「予定削除2」"
     elif match(["ヘルプ", "help", "使い方"]):
         reply = ("📖 使い方 🤙\n"
                  "「アロハ」or「おはよう」→ 朝のまとめ\n"
