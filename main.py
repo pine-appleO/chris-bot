@@ -36,10 +36,14 @@ YOUTUBE_CHANNELS = {
 }
 GOOGLE_SHEET_ID = os.environ.get("GOOGLE_SHEET_ID", "")
 SHEET_TAB = "予定"
+MEMO_TAB = "メモ"
 
 configuration = Configuration(access_token=LINE_TOKEN)
 handler = WebhookHandler(LINE_SECRET)
 JST = pytz.timezone("Asia/Tokyo")
+
+# 秘書メニューの状態管理
+secretary_mode = {"active": False}
 
 # ── Google Sheets（店訪問管理）────────────────────────────────────────
 def _sheets_service():
@@ -97,6 +101,27 @@ def delete_store_visit(date_str):
             valueInputOption="RAW",
             body={"values": new_visits}
         ).execute()
+
+def add_memo(text):
+    now = datetime.now(JST).strftime("%Y-%m-%d %H:%M")
+    _sheets_service().spreadsheets().values().append(
+        spreadsheetId=GOOGLE_SHEET_ID,
+        range=f"{MEMO_TAB}!A:B",
+        valueInputOption="RAW",
+        body={"values": [[now, text]]}
+    ).execute()
+
+def get_memos():
+    if not GA4_SERVICE_ACCOUNT_JSON or not GOOGLE_SHEET_ID:
+        return []
+    try:
+        result = _sheets_service().spreadsheets().values().get(
+            spreadsheetId=GOOGLE_SHEET_ID,
+            range=f"{MEMO_TAB}!A:B"
+        ).execute()
+        return result.get("values", [])
+    except Exception:
+        return []
 
 def get_today_store_visit():
     today = datetime.now(JST).strftime("%Y-%m-%d")
@@ -417,21 +442,47 @@ def handle_message(event):
         reply = get_youtube_stats()
     elif match(["月報", "レポート", "report"]):
         reply = build_monthly_report()
-    elif match(["タスク", "todo", "今日"]):
+    elif match(["タスク", "todo"]):
         tasks = WEEKLY_TASKS.get(now.weekday(), [])
         reply = "今日のタスク 🍍\n" + "\n".join(f"• {t}" for t in tasks)
+    elif text.strip() == "今日":
+        tasks = WEEKLY_TASKS.get(now.weekday(), []) + MONTHLY_TASKS.get(now.day, [])
+        store = get_today_store_visit()
+        if store:
+            tasks = [store] + tasks
+        task_text = "\n".join(f"• {t}" for t in tasks)
+        reply = f"今日の予定 🏝️\n\n{task_text}"
     elif match(["秘書"]):
+        secretary_mode["active"] = True
+        reply = ("BOSS🍍何をしますか？👩‍💼\n\n"
+                 "1️⃣ 予定を入れる\n"
+                 "2️⃣ 予定を見る\n"
+                 "3️⃣ メモを見る")
+    elif secretary_mode["active"] and text.strip() in ["1", "２", "1️⃣"]:
+        secretary_mode["active"] = False
+        reply = ("予定の入れ方はこちら👩‍💼\n\n"
+                 "「予定 月/日 内容」で送ってね🍍\n\n"
+                 "例：\n"
+                 "  予定 4/25 撮影\n"
+                 "  予定 5/1 コンサルMTG\n"
+                 "  予定 5/10 歯医者\n\n"
+                 "予定をどうぞ！")
+    elif secretary_mode["active"] and text.strip() in ["2", "２", "2️⃣"]:
+        secretary_mode["active"] = False
         visits = get_store_visits()
-        if visits:
-            lines = "\n".join(f"  {v[0]} {v[1] if len(v)>1 else ''}" for v in visits)
-            schedule_text = f"\n\n📅 現在の登録済み予定\n{lines}"
+        if not visits:
+            reply = "かしこまりました🍍\nまだ登録された予定はないよ！👩‍💼"
         else:
-            schedule_text = ""
-        reply = (f"BOSS🍍ご予定が入りましたか？\n\n"
-                 f"📅 予定を登録する\n「予定 4/25 撮影」\n\n"
-                 f"📋 予定を確認する\n「予定確認」\n\n"
-                 f"🗑️ 予定を削除する\n「予定削除 4/25」"
-                 f"{schedule_text}")
+            lines = "\n".join(f"  {v[0]} {v[1] if len(v)>1 else ''}" for v in visits)
+            reply = f"かしこまりました🍍こちらが予定です👩‍💼\n\n{lines}"
+    elif secretary_mode["active"] and text.strip() in ["3", "３", "3️⃣"]:
+        secretary_mode["active"] = False
+        memos = get_memos()
+        if not memos:
+            reply = "メモですね🍍\nまだメモはないよ！👩‍💼"
+        else:
+            lines = "\n".join(f"  {m[0]} {m[1] if len(m)>1 else ''}" for m in memos[-10:])
+            reply = f"メモですね🍍こちらです👩‍💼\n\n{lines}"
     elif text.lower().startswith("suno"):
         parts = text.split()
         if len(parts) >= 2 and parts[1].isdigit():
@@ -489,8 +540,19 @@ def handle_message(event):
                  "「予定 4/25 撮影」→ 予定を登録\n"
                  "「予定確認」→ 登録済み一覧\n"
                  "「予定削除 4/25」→ 予定を削除")
+    elif match(["メモ確認"]):
+        memos = get_memos()
+        if not memos:
+            reply = "📝 保存されたメモはないよ！"
+        else:
+            lines = "\n".join(f"  {m[0]} {m[1] if len(m)>1 else ''}" for m in memos[-10:])
+            reply = f"📝 メモ一覧（最新10件）\n{lines}"
     else:
-        reply = f"📌 メモしました！\n「{text}」🍍"
+        try:
+            add_memo(text)
+            reply = f"📝 メモしたよ！BOSS🍍\n「{text}」\n\n確認は「メモ確認」で！"
+        except Exception:
+            reply = f"📝 メモしました！\n「{text}」🍍"
 
     with ApiClient(configuration) as api_client:
         MessagingApi(api_client).reply_message(
