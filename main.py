@@ -4,6 +4,7 @@ import threading
 import time
 import requests
 from datetime import datetime, timedelta
+from googleapiclient.discovery import build
 from flask import Flask, request, abort
 from linebot.v3 import WebhookHandler
 from linebot.v3.exceptions import InvalidSignatureError
@@ -33,10 +34,77 @@ YOUTUBE_CHANNELS = {
     "yokohamalofichill": "UCYfWhwYkK_UKLCC772OY_xQ",
     "pinea_ppleO": "UCDXLRuSiPGk1kR_vq9C_iag",
 }
+GOOGLE_SHEET_ID = os.environ.get("GOOGLE_SHEET_ID", "")
+SHEET_TAB = "店訪問"
 
 configuration = Configuration(access_token=LINE_TOKEN)
 handler = WebhookHandler(LINE_SECRET)
 JST = pytz.timezone("Asia/Tokyo")
+
+# ── Google Sheets（店訪問管理）────────────────────────────────────────
+def _sheets_service():
+    creds_dict = json.loads(GA4_SERVICE_ACCOUNT_JSON)
+    creds = service_account.Credentials.from_service_account_info(
+        creds_dict, scopes=["https://www.googleapis.com/auth/spreadsheets"]
+    )
+    return build("sheets", "v4", credentials=creds)
+
+def _parse_visit_date(text):
+    """「4/25」や「04-25」→ YYYY-MM-DD"""
+    now = datetime.now(JST)
+    for fmt in ("%m/%d", "%m-%d"):
+        try:
+            d = datetime.strptime(text.strip(), fmt)
+            candidate = d.replace(year=now.year)
+            if candidate.date() < now.date():
+                candidate = candidate.replace(year=now.year + 1)
+            return candidate.strftime("%Y-%m-%d")
+        except ValueError:
+            continue
+    return None
+
+def get_store_visits():
+    if not GA4_SERVICE_ACCOUNT_JSON or not GOOGLE_SHEET_ID:
+        return []
+    try:
+        result = _sheets_service().spreadsheets().values().get(
+            spreadsheetId=GOOGLE_SHEET_ID,
+            range=f"{SHEET_TAB}!A:B"
+        ).execute()
+        return result.get("values", [])
+    except Exception:
+        return []
+
+def add_store_visit(date_str, time_str):
+    _sheets_service().spreadsheets().values().append(
+        spreadsheetId=GOOGLE_SHEET_ID,
+        range=f"{SHEET_TAB}!A:B",
+        valueInputOption="RAW",
+        body={"values": [[date_str, time_str]]}
+    ).execute()
+
+def delete_store_visit(date_str):
+    visits = get_store_visits()
+    new_visits = [v for v in visits if v[0] != date_str]
+    svc = _sheets_service()
+    svc.spreadsheets().values().clear(
+        spreadsheetId=GOOGLE_SHEET_ID, range=f"{SHEET_TAB}!A:B"
+    ).execute()
+    if new_visits:
+        svc.spreadsheets().values().update(
+            spreadsheetId=GOOGLE_SHEET_ID,
+            range=f"{SHEET_TAB}!A1",
+            valueInputOption="RAW",
+            body={"values": new_visits}
+        ).execute()
+
+def get_today_store_visit():
+    today = datetime.now(JST).strftime("%Y-%m-%d")
+    for v in get_store_visits():
+        if v[0] == today:
+            time_str = v[1] if len(v) > 1 else ""
+            return f"🏪 今日は店訪問 {time_str}"
+    return ""
 
 # ── 週別タスク ─────────────────────────────────────────────────────
 WEEKLY_TASKS = {
@@ -226,6 +294,9 @@ def build_morning_message():
     sodegaura = get_weather("Sodegaura", "袖ヶ浦のぞみ野")
 
     tasks = WEEKLY_TASKS.get(weekday, []) + MONTHLY_TASKS.get(now.day, [])
+    store_today = get_today_store_visit()
+    if store_today:
+        tasks = [store_today] + tasks
     task_text = "\n".join(f"  • {t}" for t in tasks)
 
     ig   = get_instagram_yesterday()
@@ -358,6 +429,42 @@ def handle_message(event):
         else:
             bal = suno_state["balance"]
             reply = f"🎵 Suno残高：{bal}クレジット" if bal is not None else "🎵 Suno残高未設定。「Suno 200」みたいに送って！"
+    elif text.startswith("店") and not match(["店確認", "店削除"]):
+        parts = text.split()
+        if len(parts) >= 3:
+            date_str = _parse_visit_date(parts[1])
+            time_str = parts[2]
+            if date_str:
+                try:
+                    add_store_visit(date_str, time_str)
+                    reply = f"🏪 店訪問を登録したよ！\n{date_str} {time_str}🍍"
+                except Exception as e:
+                    reply = f"🏪 登録失敗: {e}"
+            else:
+                reply = "🏪 日付の形式は「4/25」で送って！\n例：「店 4/25 18時」"
+        else:
+            reply = "🏪 フォーマット：「店 4/25 18時」"
+    elif match(["店確認"]):
+        visits = get_store_visits()
+        if not visits:
+            reply = "🏪 登録済みの店訪問はないよ！"
+        else:
+            lines = [f"  {v[0]} {v[1] if len(v)>1 else ''}" for v in visits]
+            reply = "🏪 登録済みの店訪問\n" + "\n".join(lines)
+    elif text.startswith("店削除"):
+        parts = text.split()
+        if len(parts) >= 2:
+            date_str = _parse_visit_date(parts[1])
+            if date_str:
+                try:
+                    delete_store_visit(date_str)
+                    reply = f"🏪 {date_str} の店訪問を削除したよ！"
+                except Exception as e:
+                    reply = f"🏪 削除失敗: {e}"
+            else:
+                reply = "🏪 日付の形式は「4/25」で送って！\n例：「店削除 4/25」"
+        else:
+            reply = "🏪 フォーマット：「店削除 4/25」"
     elif match(["ヘルプ", "help", "使い方"]):
         reply = ("📖 使い方 🤙\n"
                  "「アロハ」or「おはよう」→ 朝のまとめ\n"
@@ -366,7 +473,10 @@ def handle_message(event):
                  "「インスタ」→ 昨日のInstagram\n"
                  "「タスク」→ 今日のToDoリスト\n"
                  "「月報」→ 今月のまとめ\n"
-                 "「Suno 200」→ Suno残高を更新")
+                 "「Suno 200」→ Suno残高を更新\n"
+                 "「店 4/25 18時」→ 店訪問を登録\n"
+                 "「店確認」→ 登録済み一覧\n"
+                 "「店削除 4/25」→ 予定を削除")
     else:
         reply = f"📌 メモしました！\n「{text}」🍍"
 
