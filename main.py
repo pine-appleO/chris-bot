@@ -420,6 +420,18 @@ def handle_message(event):
     elif match(["タスク", "todo", "今日"]):
         tasks = WEEKLY_TASKS.get(now.weekday(), [])
         reply = "今日のタスク 🍍\n" + "\n".join(f"• {t}" for t in tasks)
+    elif match(["秘書"]):
+        visits = get_store_visits()
+        if visits:
+            lines = "\n".join(f"  {v[0]} {v[1] if len(v)>1 else ''}" for v in visits)
+            schedule_text = f"\n\n📅 現在の登録済み予定\n{lines}"
+        else:
+            schedule_text = ""
+        reply = (f"BOSS🍍ご予定が入りましたか？\n\n"
+                 f"📅 予定を登録する\n「予定 4/25 撮影」\n\n"
+                 f"📋 予定を確認する\n「予定確認」\n\n"
+                 f"🗑️ 予定を削除する\n「予定削除 4/25」"
+                 f"{schedule_text}")
     elif text.lower().startswith("suno"):
         parts = text.split()
         if len(parts) >= 2 and parts[1].isdigit():
