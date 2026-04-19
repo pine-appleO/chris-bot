@@ -276,7 +276,7 @@ def _translate_to_ja(text):
 def get_hawaii_news():
     try:
         import xml.etree.ElementTree as ET
-        url = "https://www.hawaiinewsnow.com/rss.xml"
+        url = "https://news.google.com/rss/search?q=hawaii+local+news&hl=en-US&gl=US&ceid=US:en"
         r = requests.get(url, timeout=5)
         root = ET.fromstring(r.content)
         items = root.findall("./channel/item")
