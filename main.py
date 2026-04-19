@@ -525,17 +525,6 @@ def handle_message(event):
         else:
             lines = "\n".join(f"  {i+1}. {m[0]} {m[1] if len(m)>1 else ''}" for i, m in enumerate(memos[-10:]))
             reply = f"📝 メモ一覧（最新10件）\n\n{lines}\n\n削除は「メモ削除 3」で！"
-    elif text.startswith("メモ削除"):
-        parts = text.split()
-        if len(parts) >= 2 and parts[1].isdigit():
-            idx = int(parts[1])
-            try:
-                success = delete_memo(idx)
-                reply = f"📝 {idx}番のメモを削除したよ！🍍" if success else "📝 その番号のメモはないよ！"
-            except Exception as e:
-                reply = f"📝 削除失敗: {e}"
-        else:
-            reply = "📝 フォーマット：「メモ削除 3」（番号で指定）"
     elif text.lower().startswith("suno"):
         parts = text.split()
         if len(parts) >= 2 and parts[1].isdigit():
