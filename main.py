@@ -58,12 +58,27 @@ BEEF_FACTS = [
 BEEF_FACT_IDX = [0]
 
 # ── 天気（wttr.in アカウント不要）────────────────────────────────
+WEATHER_EMOJI = {
+    113: ("☀️", "快晴"), 116: ("🌤️", "晴れ時々曇り"), 119: ("☁️", "曇り"), 122: ("☁️", "曇り"),
+    143: ("🌫️", "霧"), 248: ("🌫️", "霧"), 260: ("🌫️", "霧"),
+    200: ("⛈️", "雷雨"), 386: ("⛈️", "雷雨"), 389: ("⛈️", "雷雨"),
+    227: ("❄️", "雪"), 230: ("❄️", "吹雪"), 335: ("❄️", "雪"), 338: ("❄️", "大雪"),
+    371: ("❄️", "大雪"), 377: ("❄️", "みぞれ"),
+}
+
 def get_weather(location, city_name):
     try:
-        url = f"https://wttr.in/{location}?format=%C+%t+%f&lang=ja"
-        r = requests.get(url, timeout=5)
-        text = r.text.strip()
-        return f"🌤️ {city_name}：{text}"
+        url = f"https://wttr.in/{location}?format=j1"
+        r = requests.get(url, timeout=5).json()
+        current = r["current_condition"][0]
+        temp_c  = current["temp_C"]
+        feels_c = current["FeelsLikeC"]
+        code    = int(current["weatherCode"])
+        if 293 <= code <= 377 and code not in WEATHER_EMOJI:
+            icon, jp = "🌧️", "雨"
+        else:
+            icon, jp = WEATHER_EMOJI.get(code, ("🌤️", ""))
+        return f"{icon} {city_name}：{jp}　{temp_c}℃（体感{feels_c}℃）"
     except Exception:
         return f"⛅ {city_name} 天気取得失敗"
 
