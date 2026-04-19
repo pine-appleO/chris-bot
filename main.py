@@ -87,20 +87,35 @@ def get_instagram_yesterday():
     if not IG_TOKEN or not IG_USER_ID:
         return "📱 Instagram データ未設定"
     try:
+        # フォロワー数
+        profile_url = f"https://graph.instagram.com/{IG_USER_ID}?fields=followers_count,media_count&access_token={IG_TOKEN}"
+        profile = requests.get(profile_url, timeout=5).json()
+        followers = profile.get("followers_count", "-")
+        media_count = profile.get("media_count", "-")
+
+        # アカウントインサイト（前日分）
         since = int((datetime.now(JST) - timedelta(days=1)).replace(hour=0, minute=0, second=0).timestamp())
         until = int(datetime.now(JST).replace(hour=0, minute=0, second=0).timestamp())
-        fields = "timestamp,like_count,comments_count,reach,saved"
-        url = f"https://graph.instagram.com/{IG_USER_ID}/media?fields={fields}&since={since}&until={until}&access_token={IG_TOKEN}"
-        r = requests.get(url, timeout=5).json()
-        posts = r.get("data", [])
-        if not posts:
-            return "📱 Instagram：昨日の投稿なし"
-        lines = ["📱 Instagram 昨日の投稿"]
-        for p in posts[:3]:
-            lines.append(f"  ❤️ {p.get('like_count','-')}  💬 {p.get('comments_count','-')}  👁️ {p.get('reach','-')}  🔖 {p.get('saved','-')}")
-        return "\n".join(lines)
-    except Exception:
-        return "📱 Instagram 取得失敗"
+        insights_url = (f"https://graph.instagram.com/{IG_USER_ID}/insights"
+                        f"?metric=reach,impressions,profile_views,follower_count"
+                        f"&period=day&since={since}&until={until}&access_token={IG_TOKEN}")
+        insights = requests.get(insights_url, timeout=5).json()
+
+        data = {d["name"]: d["values"][-1]["value"] for d in insights.get("data", [])}
+        reach        = data.get("reach", "-")
+        impressions  = data.get("impressions", "-")
+        profile_views = data.get("profile_views", "-")
+        follower_delta = data.get("follower_count", 0)
+        delta_str = f"+{follower_delta}" if isinstance(follower_delta, int) and follower_delta >= 0 else str(follower_delta)
+
+        return (f"📱 Instagram 昨日の数値\n"
+                f"  👥 フォロワー：{followers}人（前日比{delta_str}）\n"
+                f"  👁️ リーチ：{reach}\n"
+                f"  📊 インプレッション：{impressions}\n"
+                f"  🔍 プロフィール訪問：{profile_views}\n"
+                f"  📸 総投稿数：{media_count}")
+    except Exception as e:
+        return f"📱 Instagram 取得失敗: {e}"
 
 def get_monthly_ig_summary():
     if not IG_TOKEN or not IG_USER_ID:
