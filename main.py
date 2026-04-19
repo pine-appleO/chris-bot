@@ -150,6 +150,33 @@ def delete_memo(index):
         ).execute()
     return True
 
+def protect_sheets():
+    try:
+        svc = _sheets_service()
+        meta = svc.spreadsheets().get(spreadsheetId=GOOGLE_SHEET_ID).execute()
+        protected_ids = {
+            pr["range"]["sheetId"]
+            for pr in meta.get("protectedRanges", [])
+            if pr.get("warningOnly")
+        }
+        requests = []
+        for sheet in meta.get("sheets", []):
+            props = sheet["properties"]
+            if props["title"] in [SHEET_TAB, MEMO_TAB, STATS_TAB] and props["sheetId"] not in protected_ids:
+                requests.append({"addProtectedRange": {"protectedRange": {
+                    "range": {"sheetId": props["sheetId"]},
+                    "description": "ソフィボット管理シート",
+                    "warningOnly": True,
+                }}})
+        if requests:
+            svc.spreadsheets().batchUpdate(
+                spreadsheetId=GOOGLE_SHEET_ID, body={"requests": requests}
+            ).execute()
+            return f"🔒 {len(requests)}つのタブを保護したよ！誤編集時に警告が出るようになったね🍍"
+        return "🔒 全タブすでに保護済みよ！"
+    except Exception as e:
+        return f"🔒 保護設定に失敗しちゃった…: {e}"
+
 _stats_rows_cache = None  # 統計タブを1回だけ読み込んでキャッシュ
 
 def _ensure_stats_cache():
@@ -235,14 +262,20 @@ SPECIAL_EVENTS = [
     {"date": "2026-10-21", "name": "横浜撮影3日目"},
 ]
 
-BEEF_FACTS = [
-    "🥩 シャトーブリアンはヒレの中心部。600g以下であればシャトーブリアンと謳える希少部位で、うしうらら ではA5雌牛のみを使用しています。",
-    "🥩 A5ランクの「5」は脂肪交雑・色沢・きめなど5項目すべてが最高評価。雌牛は脂のきめが細かく、より上品な甘みが出ます。",
-    "🥩 シャトーブリアンの名前はフランスの外交官ヴィコント・ド・シャトーブリアンに由来。19世紀パリで生まれた格式ある調理法です。",
-    "🥩 横浜・関内エリアでシャトーブリアンを看板コースにしているのは、うしうらら が数少ない存在。希少性を積極的に発信しましょう。",
-    "🥩 ミディアムレアは内部温度55〜60℃。シャトーブリアンはこの焼き加減でジューシーさと旨みのピークが重なります。",
-]
-BEEF_FACT_IDX = [0]
+def get_hawaii_news():
+    try:
+        import xml.etree.ElementTree as ET
+        url = "https://news.google.com/rss/search?q=ハワイ&hl=ja&gl=JP&ceid=JP:ja"
+        r = requests.get(url, timeout=5)
+        root = ET.fromstring(r.content)
+        items = root.findall("./channel/item")
+        if not items:
+            return "🏝️ ハワイニュース取得できなかったわ😭"
+        item = items[0]
+        title = item.findtext("title", "").split(" - ")[0].strip()
+        return f"🏝️ 今日のハワイニュース\n  「{title}」\n  （Google News より）"
+    except Exception:
+        return "🏝️ ハワイニュース取得できなかったわ😭"
 
 # Suno残高（LINEコマンド「Suno 200」で更新）
 suno_state = {"balance": None, "updated_at": None}
@@ -421,8 +454,9 @@ def build_morning_message():
     ig   = get_instagram_yesterday()
     ga4  = get_ga4_yesterday()
     yt   = get_youtube_stats()
-    fact = BEEF_FACTS[BEEF_FACT_IDX[0] % len(BEEF_FACTS)]
-    BEEF_FACT_IDX[0] += 1
+    honolulu = get_weather("Honolulu", "ホノルル")
+    hawaii_news = get_hawaii_news()
+    fact = f"━━━ 🏝️ ハワイ情報 ━━━\n{honolulu}\n{hawaii_news}"
 
     events = get_upcoming_events(3)
     event_section = f"\n━━━ 🍍 近日予定 ━━━\n{events}\n" if events else ""
@@ -436,7 +470,7 @@ def build_morning_message():
             f"━━━ 昨日のHP ━━━\n{ga4}\n\n"
             f"━━━ YouTube ━━━\n{yt}\n\n"
             f"{suno_section}"
-            f"━━━ 今日の牛ネタ 🥩 ━━━\n{fact}\n\n"
+            f"{fact}\n\n"
             f"今日も一緒に頑張ろうね！Mahalo🏝️")
 
 def build_tomorrow_schedule():
@@ -668,6 +702,8 @@ def handle_message(event):
                 reply = f"📅 削除に失敗しちゃった…: {e}"
         else:
             reply = "📅 番号でご指定ね！\n例：「予定削除2」"
+    elif match(["保護", "シート保護"]):
+        reply = protect_sheets()
     elif match(["ヘルプ", "help", "使い方"]):
         reply = ("📖 使い方よ🤙\n"
                  "「アロハ」or「おはよう」→ 朝のまとめ\n"
