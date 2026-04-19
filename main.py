@@ -56,7 +56,7 @@ def _sheets_service():
         creds = service_account.Credentials.from_service_account_info(
             creds_dict, scopes=["https://www.googleapis.com/auth/spreadsheets"]
         )
-        _sheets_svc_cache = build("sheets", "v4", credentials=creds)
+        _sheets_svc_cache = build("sheets", "v4", credentials=creds, cache_discovery=False)
     return _sheets_svc_cache
 
 def _parse_visit_date(text):
