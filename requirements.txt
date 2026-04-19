@@ -5,3 +5,4 @@ schedule==1.2.2
 pytz==2024.1
 gunicorn==22.0.0
 google-analytics-data==0.18.14
+google-api-python-client==2.131.0
