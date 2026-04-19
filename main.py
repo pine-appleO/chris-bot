@@ -262,18 +262,29 @@ SPECIAL_EVENTS = [
     {"date": "2026-10-21", "name": "横浜撮影3日目"},
 ]
 
+def _translate_to_ja(text):
+    try:
+        r = requests.get(
+            "https://api.mymemory.translated.net/get",
+            params={"q": text, "langpair": "en|ja"},
+            timeout=5
+        ).json()
+        return r["responseData"]["translatedText"]
+    except Exception:
+        return text
+
 def get_hawaii_news():
     try:
         import xml.etree.ElementTree as ET
-        url = "https://news.google.com/rss/search?q=ハワイ&hl=ja&gl=JP&ceid=JP:ja"
+        url = "https://www.hawaiinewsnow.com/rss.xml"
         r = requests.get(url, timeout=5)
         root = ET.fromstring(r.content)
         items = root.findall("./channel/item")
         if not items:
             return "🏝️ ハワイニュース取得できなかったわ😭"
-        item = items[0]
-        title = item.findtext("title", "").split(" - ")[0].strip()
-        return f"🏝️ 今日のハワイニュース\n  「{title}」\n  （Google News より）"
+        title_en = items[0].findtext("title", "").split(" - ")[0].strip()
+        title_ja = _translate_to_ja(title_en)
+        return f"🏝️ 今日のハワイニュース\n  「{title_ja}」\n  （Hawaii News Now より）"
     except Exception:
         return "🏝️ ハワイニュース取得できなかったわ😭"
 
