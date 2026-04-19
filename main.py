@@ -501,13 +501,19 @@ def callback():
 def handle_message(event):
     text = event.message.text.strip()
     now  = datetime.now(JST)
+    reply = "ごめん、エラーが出たわ😭もう一度試してみて！"
 
     def match(keywords):
         t = text.lower()
         return any(t.startswith(k.lower()) or t == k.lower() for k in keywords)
 
     if match(["おはよう", "アロハ", "朝", "morning"]):
-        reply = build_morning_message()
+        try:
+            reply = build_morning_message()
+        except Exception as e:
+            print(f"[ERROR] build_morning_message failed: {e}")
+            import traceback; traceback.print_exc()
+            reply = f"アロハ🤙 BOSS！ソフィよ！\n朝のまとめ取得中にエラーが出たわ😭\nエラー：{e}"
     elif match(["明日の予定", "明日", "tomorrow"]):
         reply = build_tomorrow_schedule()
     elif match(["天気", "weather"]):
@@ -671,10 +677,13 @@ def handle_message(event):
         except Exception:
             reply = f"📝 メモしておいたよ！\n「{text}」🍍"
 
-    with ApiClient(configuration) as api_client:
-        MessagingApi(api_client).reply_message(
-            ReplyMessageRequest(reply_token=event.reply_token, messages=[TextMessage(text=reply)])
-        )
+    try:
+        with ApiClient(configuration) as api_client:
+            MessagingApi(api_client).reply_message(
+                ReplyMessageRequest(reply_token=event.reply_token, messages=[TextMessage(text=reply)])
+            )
+    except Exception as e:
+        print(f"[ERROR] reply_message failed: {e}")
 
 @app.route("/")
 def index():
