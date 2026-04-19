@@ -528,12 +528,17 @@ def handle_message(event):
         else:
             lines = "\n".join(f"  {i+1}. {m[0]} {m[1] if len(m)>1 else ''}" for i, m in enumerate(memos[-10:]))
             reply = f"📝 メモ一覧（最新10件）\n\n{lines}\n\n削除は「メモ削除 3」で！"
-    elif text.lower().startswith("suno"):
-        parts = text.split()
-        if len(parts) >= 2 and parts[1].isdigit():
-            suno_state["balance"] = int(parts[1])
+    elif any(text.lower().replace(" ", "").replace("　", "").startswith(k) for k in ["suno", "スーノ", "すーの", "すの", "スノ"]):
+        normalized = text.lower().replace(" ", "").replace("　", "").translate(str.maketrans("０１２３４５６７８９", "0123456789"))
+        num_str = ""
+        for k in ["suno", "スーノ", "すーの", "すの", "スノ"]:
+            if normalized.startswith(k):
+                num_str = normalized[len(k):]
+                break
+        if num_str.isdigit():
+            suno_state["balance"] = int(num_str)
             suno_state["updated_at"] = datetime.now(JST)
-            reply = f"🎵 Suno残高を {parts[1]}クレジットに更新したよ！3日おきに朝報告するね🍍"
+            reply = f"🎵 Suno残高を {num_str}クレジットに更新したよ！3日おきに朝報告するね🍍"
         else:
             bal = suno_state["balance"]
             reply = f"🎵 Suno残高：{bal}クレジット" if bal is not None else "🎵 Suno残高未設定。「Suno 200」みたいに送って！"
