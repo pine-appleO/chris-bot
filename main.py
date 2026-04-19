@@ -598,8 +598,20 @@ def handle_message(event):
         if not memos:
             reply = "📝 保存されたメモはないよ！"
         else:
-            lines = "\n".join(f"  {m[0]} {m[1] if len(m)>1 else ''}" for m in memos[-10:])
-            reply = f"📝 メモ一覧（最新10件）\n{lines}"
+            lines = "\n".join(f"  {i+1}. {m[0]} {m[1] if len(m)>1 else ''}" for i, m in enumerate(memos[-10:]))
+            reply = f"📝 メモ一覧（最新10件）\n\n{lines}\n\n削除は「メモ削除1」で！"
+    elif text.startswith("メモ削除"):
+        num_str = text.replace("メモ削除", "").strip()
+        num_str = num_str.translate(str.maketrans("０１２３４５６７８９", "0123456789"))
+        if num_str.isdigit():
+            idx = int(num_str)
+            try:
+                success = delete_memo(idx)
+                reply = f"📝 {idx}番のメモを削除したよ！🍍" if success else "📝 その番号のメモはないよ！"
+            except Exception as e:
+                reply = f"📝 削除失敗: {e}"
+        else:
+            reply = "📝 番号で指定してね！\n例：「メモ削除1」"
     else:
         try:
             add_memo(text)
