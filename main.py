@@ -353,7 +353,7 @@ def get_ga4_yesterday():
                 Metric(name="screenPageViews"),
             ],
         )
-        response = client.run_report(request_obj)
+        response = client.run_report(request_obj, timeout=8)
         row = response.rows[0].metric_values if response.rows else None
         if not row:
             return "🌐 HP：昨日のデータなし"
@@ -509,8 +509,13 @@ def handle_message(event):
 
     if match(["おはよう", "アロハ", "朝", "morning"]):
         def _send_morning():
+            import concurrent.futures
             try:
-                send_to_user(build_morning_message())
+                with concurrent.futures.ThreadPoolExecutor() as ex:
+                    msg = ex.submit(build_morning_message).result(timeout=25)
+                send_to_user(msg)
+            except concurrent.futures.TimeoutError:
+                send_to_user("朝のまとめの取得に時間がかかりすぎたわ😭\nもう一度「アロハ」って送ってみて！")
             except Exception as e:
                 print(f"[ERROR] build_morning_message failed: {e}")
                 send_to_user(f"朝のまとめ取得中にエラーが出たわ😭\nエラー：{e}")
