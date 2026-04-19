@@ -165,16 +165,17 @@ WEEKLY_TASKS = {
 
 MONTHLY_TASKS = {
     1:  ["🗓️ 月初：先月の数値まとめ", "📋 今月の目標設定"],
-    8:  ["🎵 音楽制作！明日Sunoクレジット更新 — 使い切ろう🍍"],
+    9:  ["🎵 明日Sunoクレジット2500にリセット！今日中に使い切ろう🍍"],
     15: ["📊 月半：インスタ数値確認"],
 }
 
-# 特別予定・店訪問など（手動で追加）
-# フォーマット：{"date": "YYYY-MM-DD", "name": "予定名"}
-# 3日前から毎朝リマインドが届く
+# 特別予定（3日前から毎朝リマインドが届く）
 SPECIAL_EVENTS = [
-    # {"date": "2026-04-25", "name": "撮影"},
-    # {"date": "2026-05-01", "name": "店訪問"},
+    {"date": "2026-07-21", "name": "横浜撮影1日目"},
+    {"date": "2026-07-22", "name": "横浜撮影2日目"},
+    {"date": "2026-10-19", "name": "横浜撮影1日目"},
+    {"date": "2026-10-20", "name": "横浜撮影2日目"},
+    {"date": "2026-10-21", "name": "横浜撮影3日目"},
 ]
 
 BEEF_FACTS = [
@@ -195,8 +196,12 @@ def get_suno_section():
         return ""
     if suno_state["balance"] is None:
         return "━━━ 🎵 Suno残高 ━━━\n  未設定　「Suno 200」みたいに送って！\n"
+    bal = suno_state["balance"]
     updated = suno_state["updated_at"].strftime("%-m/%-d") if suno_state["updated_at"] else "?"
-    return f"━━━ 🎵 Suno残高 ━━━\n  {suno_state['balance']}クレジット（{updated}更新）\n"
+    reset_day = 10
+    days_left = (reset_day - now.day) if now.day < reset_day else (reset_day + 30 - now.day)
+    bar = "🟩" * min(10, int(bal / 250)) + "⬜" * (10 - min(10, int(bal / 250)))
+    return f"━━━ 🎵 Suno残高 ━━━\n  {bar}\n  {bal}/2500クレジット（{updated}更新）\n  リセットまであと{days_left}日\n"
 
 # ── 天気（wttr.in アカウント不要）────────────────────────────────
 WEATHER_EMOJI = {
