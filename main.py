@@ -43,7 +43,7 @@ handler = WebhookHandler(LINE_SECRET)
 JST = pytz.timezone("Asia/Tokyo")
 
 # 秘書メニューの状態管理
-secretary_mode = {"active": False}
+secretary_mode = {"active": False, "entry": False}
 
 # ── Google Sheets（店訪問管理）────────────────────────────────────────
 def _sheets_service():
@@ -122,6 +122,24 @@ def get_memos():
         return result.get("values", [])
     except Exception:
         return []
+
+def delete_memo(index):
+    memos = get_memos()
+    if index < 1 or index > len(memos):
+        return False
+    new_memos = [m for i, m in enumerate(memos) if i != index - 1]
+    svc = _sheets_service()
+    svc.spreadsheets().values().clear(
+        spreadsheetId=GOOGLE_SHEET_ID, range=f"{MEMO_TAB}!A:B"
+    ).execute()
+    if new_memos:
+        svc.spreadsheets().values().update(
+            spreadsheetId=GOOGLE_SHEET_ID,
+            range=f"{MEMO_TAB}!A1",
+            valueInputOption="RAW",
+            body={"values": new_memos}
+        ).execute()
+    return True
 
 def get_today_store_visit():
     today = datetime.now(JST).strftime("%Y-%m-%d")
@@ -458,16 +476,33 @@ def handle_message(event):
                  "1️⃣ 予定を入れる\n"
                  "2️⃣ 予定を見る\n"
                  "3️⃣ メモを見る")
-    elif secretary_mode["active"] and text.strip() in ["1", "２", "1️⃣"]:
+    elif secretary_mode["active"] and text.strip() in ["1", "１", "1️⃣"]:
         secretary_mode["active"] = False
+        secretary_mode["entry"] = True
         reply = ("予定の入れ方はこちら👩‍💼\n\n"
-                 "「予定 月/日 内容」で送ってね🍍\n\n"
+                 "「月/日 内容」で送ってね🍍\n\n"
                  "例：\n"
-                 "  予定 4/25 撮影\n"
-                 "  予定 5/1 コンサルMTG\n"
-                 "  予定 5/10 歯医者\n\n"
+                 "  4/25 撮影\n"
+                 "  5/1 コンサルMTG\n"
+                 "  5/10 歯医者\n\n"
                  "予定をどうぞ！")
-    elif secretary_mode["active"] and text.strip() in ["2", "２", "2️⃣"]:
+    elif secretary_mode["entry"]:
+        secretary_mode["entry"] = False
+        parts = text.split()
+        if len(parts) >= 2:
+            date_str = _parse_visit_date(parts[0])
+            memo = " ".join(parts[1:])
+            if date_str:
+                try:
+                    add_store_visit(date_str, memo)
+                    reply = f"📅 登録したよ！BOSS🍍\n{date_str} {memo}"
+                except Exception as e:
+                    reply = f"📅 登録失敗: {e}"
+            else:
+                reply = "📅 日付が読めなかった💦\n「4/25 撮影」の形式で送って！"
+        else:
+            reply = "📅 「4/25 撮影」の形式で送って！"
+    elif secretary_mode["active"] and text.strip() in ["2", "２", "2️⃣", "2"]:
         secretary_mode["active"] = False
         visits = get_store_visits()
         if not visits:
@@ -481,8 +516,26 @@ def handle_message(event):
         if not memos:
             reply = "メモですね🍍\nまだメモはないよ！👩‍💼"
         else:
-            lines = "\n".join(f"  {m[0]} {m[1] if len(m)>1 else ''}" for m in memos[-10:])
-            reply = f"メモですね🍍こちらです👩‍💼\n\n{lines}"
+            lines = "\n".join(f"  {i+1}. {m[0]} {m[1] if len(m)>1 else ''}" for i, m in enumerate(memos[-10:]))
+            reply = f"メモですね🍍こちらです👩‍💼\n\n{lines}\n\n削除は「メモ削除 3」で！"
+    elif match(["メモ確認"]):
+        memos = get_memos()
+        if not memos:
+            reply = "📝 保存されたメモはないよ！"
+        else:
+            lines = "\n".join(f"  {i+1}. {m[0]} {m[1] if len(m)>1 else ''}" for i, m in enumerate(memos[-10:]))
+            reply = f"📝 メモ一覧（最新10件）\n\n{lines}\n\n削除は「メモ削除 3」で！"
+    elif text.startswith("メモ削除"):
+        parts = text.split()
+        if len(parts) >= 2 and parts[1].isdigit():
+            idx = int(parts[1])
+            try:
+                success = delete_memo(idx)
+                reply = f"📝 {idx}番のメモを削除したよ！🍍" if success else "📝 その番号のメモはないよ！"
+            except Exception as e:
+                reply = f"📝 削除失敗: {e}"
+        else:
+            reply = "📝 フォーマット：「メモ削除 3」（番号で指定）"
     elif text.lower().startswith("suno"):
         parts = text.split()
         if len(parts) >= 2 and parts[1].isdigit():
