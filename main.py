@@ -35,7 +35,7 @@ YOUTUBE_CHANNELS = {
     "pinea_ppleO": "UCDXLRuSiPGk1kR_vq9C_iag",
 }
 GOOGLE_SHEET_ID = os.environ.get("GOOGLE_SHEET_ID", "")
-SHEET_TAB = "店訪問"
+SHEET_TAB = "予定"
 
 configuration = Configuration(access_token=LINE_TOKEN)
 handler = WebhookHandler(LINE_SECRET)
@@ -102,8 +102,8 @@ def get_today_store_visit():
     today = datetime.now(JST).strftime("%Y-%m-%d")
     for v in get_store_visits():
         if v[0] == today:
-            time_str = v[1] if len(v) > 1 else ""
-            return f"🏪 今日は店訪問 {time_str}"
+            memo = v[1] if len(v) > 1 else ""
+            return f"📅 今日の予定：{memo}"
     return ""
 
 # ── 週別タスク ─────────────────────────────────────────────────────
@@ -309,7 +309,7 @@ def build_morning_message():
     event_section = f"\n━━━ 🍍 近日予定 ━━━\n{events}\n" if events else ""
     suno_section = get_suno_section()
 
-    return (f"アロハ🤙 プルおさん！\n{date_str}\n\n"
+    return (f"アロハ🤙 BOSS！\n{date_str}\n\n"
             f"{yokohama}\n{sodegaura}\n"
             f"{event_section}\n"
             f"━━━ 今日のタスク ━━━\n{task_text}\n\n"
@@ -429,42 +429,42 @@ def handle_message(event):
         else:
             bal = suno_state["balance"]
             reply = f"🎵 Suno残高：{bal}クレジット" if bal is not None else "🎵 Suno残高未設定。「Suno 200」みたいに送って！"
-    elif text.startswith("店") and not match(["店確認", "店削除"]):
+    elif text.startswith("予定") and not match(["予定確認", "予定削除"]):
         parts = text.split()
         if len(parts) >= 3:
             date_str = _parse_visit_date(parts[1])
-            time_str = parts[2]
+            memo = " ".join(parts[2:])
             if date_str:
                 try:
-                    add_store_visit(date_str, time_str)
-                    reply = f"🏪 店訪問を登録したよ！\n{date_str} {time_str}🍍"
+                    add_store_visit(date_str, memo)
+                    reply = f"📅 予定を登録したよ！\n{date_str} {memo}🍍"
                 except Exception as e:
-                    reply = f"🏪 登録失敗: {e}"
+                    reply = f"📅 登録失敗: {e}"
             else:
-                reply = "🏪 日付の形式は「4/25」で送って！\n例：「店 4/25 18時」"
+                reply = "📅 日付の形式は「4/25」で送って！\n例：「予定 4/25 撮影」"
         else:
-            reply = "🏪 フォーマット：「店 4/25 18時」"
-    elif match(["店確認"]):
+            reply = "📅 フォーマット：「予定 4/25 撮影」"
+    elif match(["予定確認"]):
         visits = get_store_visits()
         if not visits:
-            reply = "🏪 登録済みの店訪問はないよ！"
+            reply = "📅 登録済みの予定はないよ！"
         else:
             lines = [f"  {v[0]} {v[1] if len(v)>1 else ''}" for v in visits]
-            reply = "🏪 登録済みの店訪問\n" + "\n".join(lines)
-    elif text.startswith("店削除"):
+            reply = "📅 登録済みの予定\n" + "\n".join(lines)
+    elif text.startswith("予定削除"):
         parts = text.split()
         if len(parts) >= 2:
             date_str = _parse_visit_date(parts[1])
             if date_str:
                 try:
                     delete_store_visit(date_str)
-                    reply = f"🏪 {date_str} の店訪問を削除したよ！"
+                    reply = f"📅 {date_str} の予定を削除したよ！"
                 except Exception as e:
-                    reply = f"🏪 削除失敗: {e}"
+                    reply = f"📅 削除失敗: {e}"
             else:
-                reply = "🏪 日付の形式は「4/25」で送って！\n例：「店削除 4/25」"
+                reply = "📅 日付の形式は「4/25」で送って！\n例：「予定削除 4/25」"
         else:
-            reply = "🏪 フォーマット：「店削除 4/25」"
+            reply = "📅 フォーマット：「予定削除 4/25」"
     elif match(["ヘルプ", "help", "使い方"]):
         reply = ("📖 使い方 🤙\n"
                  "「アロハ」or「おはよう」→ 朝のまとめ\n"
@@ -474,9 +474,9 @@ def handle_message(event):
                  "「タスク」→ 今日のToDoリスト\n"
                  "「月報」→ 今月のまとめ\n"
                  "「Suno 200」→ Suno残高を更新\n"
-                 "「店 4/25 18時」→ 店訪問を登録\n"
-                 "「店確認」→ 登録済み一覧\n"
-                 "「店削除 4/25」→ 予定を削除")
+                 "「予定 4/25 撮影」→ 予定を登録\n"
+                 "「予定確認」→ 登録済み一覧\n"
+                 "「予定削除 4/25」→ 予定を削除")
     else:
         reply = f"📌 メモしました！\n「{text}」🍍"
 
