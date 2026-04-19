@@ -346,10 +346,7 @@ def get_ga4_yesterday():
         client = BetaAnalyticsDataClient(credentials=creds)
         request_obj = RunReportRequest(
             property=f"properties/{GA4_PROPERTY_ID}",
-            date_ranges=[
-                DateRange(start_date="yesterday", end_date="yesterday"),
-                DateRange(start_date="2daysAgo", end_date="2daysAgo"),
-            ],
+            date_ranges=[DateRange(start_date="yesterday", end_date="yesterday")],
             metrics=[
                 Metric(name="sessions"),
                 Metric(name="activeUsers"),
@@ -357,20 +354,18 @@ def get_ga4_yesterday():
             ],
         )
         response = client.run_report(request_obj)
-        rows = {r.dimension_values[0].value: r.metric_values for r in response.rows} if response.rows else {}
-        row = rows.get("date_range_0") or (response.rows[0].metric_values if response.rows else None)
-        prev_row = rows.get("date_range_1")
+        row = response.rows[0].metric_values if response.rows else None
         if not row:
             return "🌐 HP：昨日のデータなし"
         sessions  = row[0].value
         users     = row[1].value
         pageviews = row[2].value
-        if prev_row:
-            u_diff = fmt_diff(users, prev_row[1].value)
-            s_diff = fmt_diff(sessions, prev_row[0].value)
-            p_diff = fmt_diff(pageviews, prev_row[2].value)
-        else:
-            u_diff = s_diff = p_diff = ""
+        u_diff = fmt_diff(users, get_stat("ga4_users")) if get_stat("ga4_users") else ""
+        s_diff = fmt_diff(sessions, get_stat("ga4_sessions")) if get_stat("ga4_sessions") else ""
+        p_diff = fmt_diff(pageviews, get_stat("ga4_pageviews")) if get_stat("ga4_pageviews") else ""
+        set_stat("ga4_users", users)
+        set_stat("ga4_sessions", sessions)
+        set_stat("ga4_pageviews", pageviews)
         return (f"🌐 ホームページ 昨日\n"
                 f"  👤 ユーザー：{users}人{'（'+u_diff+'）' if u_diff else ''}\n"
                 f"  🔄 セッション：{sessions}{'（'+s_diff+'）' if s_diff else ''}\n"
