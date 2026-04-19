@@ -37,6 +37,7 @@ YOUTUBE_CHANNELS = {
 GOOGLE_SHEET_ID = os.environ.get("GOOGLE_SHEET_ID", "")
 SHEET_TAB = "予定"
 MEMO_TAB = "メモ"
+STATS_TAB = "統計"
 
 configuration = Configuration(access_token=LINE_TOKEN)
 handler = WebhookHandler(LINE_SECRET)
@@ -144,6 +145,46 @@ def delete_memo(index):
         ).execute()
     return True
 
+def get_stat(key):
+    try:
+        rows = _sheets_service().spreadsheets().values().get(
+            spreadsheetId=GOOGLE_SHEET_ID, range=f"{STATS_TAB}!A:B"
+        ).execute().get("values", [])
+        for row in rows:
+            if row and row[0] == key:
+                return row[1] if len(row) > 1 else None
+    except Exception:
+        return None
+
+def set_stat(key, value):
+    try:
+        rows = _sheets_service().spreadsheets().values().get(
+            spreadsheetId=GOOGLE_SHEET_ID, range=f"{STATS_TAB}!A:B"
+        ).execute().get("values", [])
+        for i, row in enumerate(rows):
+            if row and row[0] == key:
+                _sheets_service().spreadsheets().values().update(
+                    spreadsheetId=GOOGLE_SHEET_ID,
+                    range=f"{STATS_TAB}!B{i+1}",
+                    valueInputOption="RAW",
+                    body={"values": [[str(value)]]}
+                ).execute()
+                return
+        _sheets_service().spreadsheets().values().append(
+            spreadsheetId=GOOGLE_SHEET_ID, range=f"{STATS_TAB}!A:B",
+            valueInputOption="RAW", body={"values": [[key, str(value)]]}
+        ).execute()
+    except Exception:
+        pass
+
+def fmt_diff(current, prev_str):
+    """前日比を「+12」「-5」形式で返す"""
+    try:
+        diff = int(current) - int(prev_str)
+        return f"+{diff}" if diff >= 0 else str(diff)
+    except Exception:
+        return "?"
+
 def get_today_store_visit():
     today = datetime.now(JST).strftime("%Y-%m-%d")
     for v in get_store_visits():
@@ -179,7 +220,7 @@ SPECIAL_EVENTS = [
 ]
 
 BEEF_FACTS = [
-    "🥩 シャトーブリアンは牛1頭から約200gしか取れないヒレの中心部。うしうらら は毎日A5雌牛を直送しています。",
+    "🥩 シャトーブリアンはヒレの中心部。600g以下であればシャトーブリアンと謳える希少部位で、うしうらら ではA5雌牛のみを使用しています。",
     "🥩 A5ランクの「5」は脂肪交雑・色沢・きめなど5項目すべてが最高評価。雌牛は脂のきめが細かく、より上品な甘みが出ます。",
     "🥩 シャトーブリアンの名前はフランスの外交官ヴィコント・ド・シャトーブリアンに由来。19世紀パリで生まれた格式ある調理法です。",
     "🥩 横浜・関内エリアでシャトーブリアンを看板コースにしているのは、うしうらら が数少ない存在。希少性を積極的に発信しましょう。",
@@ -238,9 +279,11 @@ def get_instagram_yesterday():
         profile = requests.get(profile_url, timeout=5).json()
         followers = profile.get("followers_count", "-")
         media_count = profile.get("media_count", "-")
-
+        prev = get_stat("ig_followers")
+        diff = f"（{fmt_diff(followers, prev)}）" if prev else ""
+        set_stat("ig_followers", followers)
         return (f"📱 Instagram\n"
-                f"  👥 フォロワー：{followers}人\n"
+                f"  👥 フォロワー：{followers}人{diff}\n"
                 f"  📸 総投稿数：{media_count}")
     except Exception as e:
         return f"📱 Instagram 取得失敗: {e}"
@@ -283,7 +326,10 @@ def get_youtube_stats():
             subs  = int(stats["subscriberCount"])
             views = int(stats["viewCount"])
             videos = int(stats["videoCount"])
-            lines.append(f"  @{name}\n  👥 {subs:,}人  👁️ {views:,}回  📹 {videos}本")
+            prev_subs = get_stat(f"yt_subs_{name}")
+            diff = f"（{fmt_diff(subs, prev_subs)}）" if prev_subs else ""
+            set_stat(f"yt_subs_{name}", subs)
+            lines.append(f"  @{name}\n  👥 {subs:,}人{diff}  👁️ {views:,}回  📹 {videos}本")
         return "\n".join(lines)
     except Exception as e:
         return f"🎬 YouTube 取得失敗: {e}"
@@ -300,7 +346,10 @@ def get_ga4_yesterday():
         client = BetaAnalyticsDataClient(credentials=creds)
         request_obj = RunReportRequest(
             property=f"properties/{GA4_PROPERTY_ID}",
-            date_ranges=[DateRange(start_date="yesterday", end_date="yesterday")],
+            date_ranges=[
+                DateRange(start_date="yesterday", end_date="yesterday"),
+                DateRange(start_date="2daysAgo", end_date="2daysAgo"),
+            ],
             metrics=[
                 Metric(name="sessions"),
                 Metric(name="activeUsers"),
@@ -308,16 +357,24 @@ def get_ga4_yesterday():
             ],
         )
         response = client.run_report(request_obj)
-        row = response.rows[0].metric_values if response.rows else None
+        rows = {r.dimension_values[0].value: r.metric_values for r in response.rows} if response.rows else {}
+        row = rows.get("date_range_0") or (response.rows[0].metric_values if response.rows else None)
+        prev_row = rows.get("date_range_1")
         if not row:
             return "🌐 HP：昨日のデータなし"
-        sessions   = row[0].value
-        users      = row[1].value
-        pageviews  = row[2].value
+        sessions  = row[0].value
+        users     = row[1].value
+        pageviews = row[2].value
+        if prev_row:
+            u_diff = fmt_diff(users, prev_row[1].value)
+            s_diff = fmt_diff(sessions, prev_row[0].value)
+            p_diff = fmt_diff(pageviews, prev_row[2].value)
+        else:
+            u_diff = s_diff = p_diff = ""
         return (f"🌐 ホームページ 昨日\n"
-                f"  👤 ユーザー：{users}人\n"
-                f"  🔄 セッション：{sessions}\n"
-                f"  📄 ページビュー：{pageviews}")
+                f"  👤 ユーザー：{users}人{'（'+u_diff+'）' if u_diff else ''}\n"
+                f"  🔄 セッション：{sessions}{'（'+s_diff+'）' if s_diff else ''}\n"
+                f"  📄 ページビュー：{pageviews}{'（'+p_diff+'）' if p_diff else ''}")
     except Exception as e:
         return f"🌐 GA4 取得失敗: {e}"
 
