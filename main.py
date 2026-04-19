@@ -40,23 +40,27 @@ JST = pytz.timezone("Asia/Tokyo")
 
 # ── 週別タスク ─────────────────────────────────────────────────────
 WEEKLY_TASKS = {
-    0: ["📋 今週のタスク・仕入れ確認", "📊 先週のインスタ数値振り返り", "📝 今週の投稿計画（目標10投稿）", "💬 口コミ・DM返信"],
-    1: ["📱 インスタ投稿", "🥩 仕入れ・在庫確認", "💬 口コミ返信"],
-    2: ["🔴 定休日", "📊 週半レポート確認", "✏️ 翌日以降の投稿準備"],
-    3: ["📱 インスタ投稿", "🏪 店舗運営確認", "📞 予約確認・調整"],
-    4: ["📱 インスタ投稿（週末向け）", "💡 来週コンテンツ企画", "📋 週末スタッフ連絡"],
-    5: ["📸 シャトーブリアン動画・写真撮影", "📱 インスタ投稿", "🔥 週末ピーク準備"],
-    6: ["📊 週次まとめ", "📱 インスタ投稿", "📋 翌週仕込み・準備"],
+    0: ["📤 インスタ動画投稿（うしうらら）", "📖 ストーリー投稿", "📊 先週インスタ数値確認"],
+    1: ["📖 ストーリー投稿", "🎬 動画編集（うしうらら or YouTube）"],
+    2: ["📖 ストーリー投稿", "🎬 動画編集 or 🎵 音楽制作"],
+    3: ["📷 インスタ画像投稿（うしうらら）", "📖 ストーリー投稿"],
+    4: ["📖 ストーリー投稿", "🎬 動画編集 or 🎵 音楽制作"],
+    5: ["📖 ストーリー投稿"],
+    6: ["🎬 明日の動画を準備・編集（月曜投稿用）", "📖 ストーリー投稿"],
 }
 
 MONTHLY_TASKS = {
     1:  ["🗓️ 月初：先月の数値まとめ", "📋 今月の目標設定"],
-    15: ["📊 月半レポート確認"],
+    8:  ["🎵 音楽制作！明日Sunoクレジット更新 — 使い切ろう🍍"],
+    15: ["📊 月半：インスタ数値確認"],
 }
 
-# 特別予定（手動で追加・日付はYYYY-MM-DD形式）
+# 特別予定・店訪問など（手動で追加）
+# フォーマット：{"date": "YYYY-MM-DD", "name": "予定名"}
+# 3日前から毎朝リマインドが届く
 SPECIAL_EVENTS = [
     # {"date": "2026-04-25", "name": "撮影"},
+    # {"date": "2026-05-01", "name": "店訪問"},
 ]
 
 BEEF_FACTS = [
@@ -67,6 +71,18 @@ BEEF_FACTS = [
     "🥩 ミディアムレアは内部温度55〜60℃。シャトーブリアンはこの焼き加減でジューシーさと旨みのピークが重なります。",
 ]
 BEEF_FACT_IDX = [0]
+
+# Suno残高（LINEコマンド「Suno 200」で更新）
+suno_state = {"balance": None, "updated_at": None}
+
+def get_suno_section():
+    now = datetime.now(JST)
+    if (now.day - 1) % 3 != 0:
+        return ""
+    if suno_state["balance"] is None:
+        return "━━━ 🎵 Suno残高 ━━━\n  未設定　「Suno 200」みたいに送って！\n"
+    updated = suno_state["updated_at"].strftime("%-m/%-d") if suno_state["updated_at"] else "?"
+    return f"━━━ 🎵 Suno残高 ━━━\n  {suno_state['balance']}クレジット（{updated}更新）\n"
 
 # ── 天気（wttr.in アカウント不要）────────────────────────────────
 WEATHER_EMOJI = {
@@ -220,6 +236,7 @@ def build_morning_message():
 
     events = get_upcoming_events(3)
     event_section = f"\n━━━ 🍍 近日予定 ━━━\n{events}\n" if events else ""
+    suno_section = get_suno_section()
 
     return (f"アロハ🤙 プルおさん！\n{date_str}\n\n"
             f"{yokohama}\n{sodegaura}\n"
@@ -228,6 +245,7 @@ def build_morning_message():
             f"━━━ 昨日のインスタ ━━━\n{ig}\n\n"
             f"━━━ 昨日のHP ━━━\n{ga4}\n\n"
             f"━━━ YouTube ━━━\n{yt}\n\n"
+            f"{suno_section}"
             f"━━━ 今日の牛ネタ 🥩 ━━━\n{fact}\n\n"
             f"今日もよろしく！🏝️")
 
@@ -331,6 +349,15 @@ def handle_message(event):
     elif match(["タスク", "todo", "今日"]):
         tasks = WEEKLY_TASKS.get(now.weekday(), [])
         reply = "今日のタスク 🍍\n" + "\n".join(f"• {t}" for t in tasks)
+    elif text.lower().startswith("suno"):
+        parts = text.split()
+        if len(parts) >= 2 and parts[1].isdigit():
+            suno_state["balance"] = int(parts[1])
+            suno_state["updated_at"] = datetime.now(JST)
+            reply = f"🎵 Suno残高を {parts[1]}クレジットに更新したよ！3日おきに朝報告するね🍍"
+        else:
+            bal = suno_state["balance"]
+            reply = f"🎵 Suno残高：{bal}クレジット" if bal is not None else "🎵 Suno残高未設定。「Suno 200」みたいに送って！"
     elif match(["ヘルプ", "help", "使い方"]):
         reply = ("📖 使い方 🤙\n"
                  "「アロハ」or「おはよう」→ 朝のまとめ\n"
@@ -338,7 +365,8 @@ def handle_message(event):
                  "「天気」→ 横浜・袖ヶ浦の天気\n"
                  "「インスタ」→ 昨日のInstagram\n"
                  "「タスク」→ 今日のToDoリスト\n"
-                 "「月報」→ 今月のまとめ")
+                 "「月報」→ 今月のまとめ\n"
+                 "「Suno 200」→ Suno残高を更新")
     else:
         reply = f"📌 メモしました！\n「{text}」🍍"
 
