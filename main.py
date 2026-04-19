@@ -311,7 +311,8 @@ def handle_message(event):
     now  = datetime.now(JST)
 
     def match(keywords):
-        return any(text.startswith(k) or text == k for k in keywords)
+        t = text.lower()
+        return any(t.startswith(k.lower()) or t == k.lower() for k in keywords)
 
     if match(["おはよう", "アロハ", "朝", "morning"]):
         reply = build_morning_message()
