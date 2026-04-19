@@ -93,26 +93,8 @@ def get_instagram_yesterday():
         followers = profile.get("followers_count", "-")
         media_count = profile.get("media_count", "-")
 
-        # アカウントインサイト（前日分）
-        since = int((datetime.now(JST) - timedelta(days=1)).replace(hour=0, minute=0, second=0).timestamp())
-        until = int(datetime.now(JST).replace(hour=0, minute=0, second=0).timestamp())
-        insights_url = (f"https://graph.instagram.com/{IG_USER_ID}/insights"
-                        f"?metric=reach,impressions,profile_views,follower_count"
-                        f"&period=day&since={since}&until={until}&access_token={IG_TOKEN}")
-        insights = requests.get(insights_url, timeout=5).json()
-
-        data = {d["name"]: d["values"][-1]["value"] for d in insights.get("data", [])}
-        reach        = data.get("reach", "-")
-        impressions  = data.get("impressions", "-")
-        profile_views = data.get("profile_views", "-")
-        follower_delta = data.get("follower_count", 0)
-        delta_str = f"+{follower_delta}" if isinstance(follower_delta, int) and follower_delta >= 0 else str(follower_delta)
-
-        return (f"📱 Instagram 昨日の数値\n"
-                f"  👥 フォロワー：{followers}人（前日比{delta_str}）\n"
-                f"  👁️ リーチ：{reach}\n"
-                f"  📊 インプレッション：{impressions}\n"
-                f"  🔍 プロフィール訪問：{profile_views}\n"
+        return (f"📱 Instagram\n"
+                f"  👥 フォロワー：{followers}人\n"
                 f"  📸 総投稿数：{media_count}")
     except Exception as e:
         return f"📱 Instagram 取得失敗: {e}"
