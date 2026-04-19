@@ -417,7 +417,7 @@ def build_morning_message():
     event_section = f"\n━━━ 🍍 近日予定 ━━━\n{events}\n" if events else ""
     suno_section = get_suno_section()
 
-    return (f"アロハ🤙 BOSS！\n{date_str}\n\n"
+    return (f"アロハ🤙 BOSS！ソフィよ！\n{date_str}\n\n"
             f"{yokohama}\n{sodegaura}\n"
             f"{event_section}\n"
             f"━━━ 今日のタスク ━━━\n{task_text}\n\n"
@@ -426,7 +426,7 @@ def build_morning_message():
             f"━━━ YouTube ━━━\n{yt}\n\n"
             f"{suno_section}"
             f"━━━ 今日の牛ネタ 🥩 ━━━\n{fact}\n\n"
-            f"今日もよろしく！🏝️")
+            f"今日も一緒に頑張ろうね！Mahalo🏝️")
 
 def build_tomorrow_schedule():
     now = datetime.now(JST)
@@ -537,20 +537,20 @@ def handle_message(event):
         reply = f"今日の予定 🏝️\n\n{task_text}"
     elif match(["秘書"]):
         secretary_mode["active"] = True
-        reply = ("BOSS🍍何をしますか？👩‍💼\n\n"
+        reply = ("BOSS🍍何かご用？ソフィに任せて！👩‍💼\n\n"
                  "1️⃣ 予定を入れる\n"
                  "2️⃣ 予定を見る\n"
                  "3️⃣ メモを見る")
     elif secretary_mode["active"] and text.strip() in ["1", "１", "1️⃣"]:
         secretary_mode["active"] = False
         secretary_mode["entry"] = True
-        reply = ("予定の入れ方はこちら👩‍💼\n\n"
+        reply = ("了解よ！👩‍💼\n\n"
                  "「月/日 内容」で送ってね🍍\n\n"
                  "例：\n"
                  "  4/25 撮影\n"
                  "  5/1 コンサルMTG\n"
                  "  5/10 歯医者\n\n"
-                 "予定をどうぞ！")
+                 "どうぞ！")
     elif secretary_mode["entry"]:
         secretary_mode["entry"] = False
         parts = text.split()
@@ -562,34 +562,34 @@ def handle_message(event):
                     add_store_visit(date_str, memo)
                     reply = f"📅 登録したよ！BOSS🍍\n{date_str} {memo}"
                 except Exception as e:
-                    reply = f"📅 登録失敗: {e}"
+                    reply = f"📅 登録失敗しちゃった…: {e}"
             else:
-                reply = "📅 日付が読めなかった💦\n「4/25 撮影」の形式で送って！"
+                reply = "📅 日付が読めなかったわ💦\n「4/25 撮影」の形式で送って！"
         else:
-            reply = "📅 「4/25 撮影」の形式で送って！"
+            reply = "📅 「4/25 撮影」の形式で送ってね！"
     elif secretary_mode["active"] and text.strip() in ["2", "２", "2️⃣", "2"]:
         secretary_mode["active"] = False
         visits = get_store_visits()
         if not visits:
-            reply = "かしこまりました🍍\nまだ登録された予定はないよ！👩‍💼"
+            reply = "まだ予定は入ってないみたい！BOSS🍍👩‍💼"
         else:
             lines = "\n".join(f"  {v[0]} {v[1] if len(v)>1 else ''}" for v in visits)
-            reply = f"かしこまりました🍍こちらが予定です👩‍💼\n\n{lines}"
+            reply = f"はいBOSS🍍予定はこちらよ！👩‍💼\n\n{lines}"
     elif secretary_mode["active"] and text.strip() in ["3", "３", "3️⃣"]:
         secretary_mode["active"] = False
         memos = get_memos()
         if not memos:
-            reply = "メモですね🍍\nまだメモはないよ！👩‍💼"
+            reply = "メモね🍍\nまだ何もないみたい！👩‍💼"
         else:
             lines = "\n".join(f"  {i+1}. {m[0]} {m[1] if len(m)>1 else ''}" for i, m in enumerate(memos[-10:]))
-            reply = f"メモですね🍍こちらです👩‍💼\n\n{lines}\n\n削除は「メモ削除 3」で！"
+            reply = f"メモね🍍こちらよ！👩‍💼\n\n{lines}\n\n削除は「メモ削除1」で！"
     elif match(["メモ確認"]):
         memos = get_memos()
         if not memos:
-            reply = "📝 保存されたメモはないよ！"
+            reply = "📝 まだメモは残っていないようよ！"
         else:
             lines = "\n".join(f"  {i+1}. {m[0]} {m[1] if len(m)>1 else ''}" for i, m in enumerate(memos[-10:]))
-            reply = f"📝 メモ一覧（最新10件）\n\n{lines}\n\n削除は「メモ削除 3」で！"
+            reply = f"📝 メモ一覧（最新10件）\n\n{lines}\n\n削除は「メモ削除1」でどうぞ！"
     elif any(text.lower().replace(" ", "").replace("　", "").startswith(k) for k in ["suno", "スーノ", "すーの", "すの", "スノ"]):
         normalized = text.lower().replace(" ", "").replace("　", "").translate(str.maketrans("０１２３４５６７８９", "0123456789"))
         num_str = ""
@@ -600,10 +600,10 @@ def handle_message(event):
         if num_str.isdigit():
             suno_state["balance"] = int(num_str)
             suno_state["updated_at"] = datetime.now(JST)
-            reply = f"🎵 Suno残高を {num_str}クレジットに更新したよ！3日おきに朝報告するね🍍"
+            reply = f"🎵 Suno残高を{num_str}クレジットに更新したよ！3日おきに朝お知らせしますね🍍"
         else:
             bal = suno_state["balance"]
-            reply = f"🎵 Suno残高：{bal}クレジット" if bal is not None else "🎵 Suno残高未設定。「Suno 200」みたいに送って！"
+            reply = f"🎵 Suno残高：{bal}クレジットよ" if bal is not None else "🎵 Suno残高が未設定よ。「Suno 200」のように送ってね！"
     elif text.startswith("予定") and not match(["予定確認", "予定削除"]):
         parts = text.split()
         if len(parts) >= 3:
@@ -612,20 +612,20 @@ def handle_message(event):
             if date_str:
                 try:
                     add_store_visit(date_str, memo)
-                    reply = f"📅 予定を登録したよ！\n{date_str} {memo}🍍"
+                    reply = f"📅 予定を登録したよ🍍\n{date_str} {memo}"
                 except Exception as e:
-                    reply = f"📅 登録失敗: {e}"
+                    reply = f"📅 登録に失敗しちゃった…: {e}"
             else:
-                reply = "📅 日付の形式は「4/25」で送って！\n例：「予定 4/25 撮影」"
+                reply = "📅 日付は「4/25」の形式で送ってね！\n例：「予定 4/25 撮影」"
         else:
-            reply = "📅 フォーマット：「予定 4/25 撮影」"
+            reply = "📅 「予定 4/25 撮影」の形式でお送りね！"
     elif match(["予定確認"]):
         visits = get_store_visits()
         if not visits:
-            reply = "📅 登録済みの予定はないよ！"
+            reply = "📅 登録済みの予定はまだないよ！"
         else:
             lines = "\n".join(f"  {i+1}. {v[0]} {v[1] if len(v)>1 else ''}" for i, v in enumerate(visits))
-            reply = f"📅 登録済みの予定\n\n{lines}\n\n削除は「予定削除2」で！"
+            reply = f"📅 登録済みの予定よ\n\n{lines}\n\n削除は「予定削除2」でどうぞ！"
     elif text.startswith("予定削除"):
         num_str = text.replace("予定削除", "").strip()
         num_str = num_str.translate(str.maketrans("０１２３４５６７８９", "0123456789"))
@@ -633,13 +633,13 @@ def handle_message(event):
             idx = int(num_str)
             try:
                 success = delete_store_visit(idx)
-                reply = f"📅 {idx}番の予定を削除したよ！🍍" if success else "📅 その番号の予定はないよ！"
+                reply = f"📅 {idx}番の予定を削除したよ🍍" if success else "📅 その番号の予定は見当たらないわ！"
             except Exception as e:
-                reply = f"📅 削除失敗: {e}"
+                reply = f"📅 削除に失敗しちゃった…: {e}"
         else:
-            reply = "📅 番号で指定してね！\n例：「予定削除2」"
+            reply = "📅 番号でご指定ね！\n例：「予定削除2」"
     elif match(["ヘルプ", "help", "使い方"]):
-        reply = ("📖 使い方 🤙\n"
+        reply = ("📖 使い方よ🤙\n"
                  "「アロハ」or「おはよう」→ 朝のまとめ\n"
                  "「明日の予定」→ 明日のスケジュール\n"
                  "「天気」→ 横浜・袖ヶ浦の天気\n"
@@ -649,14 +649,14 @@ def handle_message(event):
                  "「Suno 200」→ Suno残高を更新\n"
                  "「予定 4/25 撮影」→ 予定を登録\n"
                  "「予定確認」→ 登録済み一覧\n"
-                 "「予定削除 4/25」→ 予定を削除")
+                 "「予定削除2」→ 予定を削除")
     elif match(["メモ確認"]):
         memos = get_memos()
         if not memos:
-            reply = "📝 保存されたメモはないよ！"
+            reply = "📝 まだメモは残っていないようよ！"
         else:
             lines = "\n".join(f"  {i+1}. {m[0]} {m[1] if len(m)>1 else ''}" for i, m in enumerate(memos[-10:]))
-            reply = f"📝 メモ一覧（最新10件）\n\n{lines}\n\n削除は「メモ削除1」で！"
+            reply = f"📝 メモ一覧（最新10件）\n\n{lines}\n\n削除は「メモ削除1」でどうぞ！"
     elif text.startswith("メモ削除"):
         num_str = text.replace("メモ削除", "").strip()
         num_str = num_str.translate(str.maketrans("０１２３４５６７８９", "0123456789"))
@@ -664,17 +664,17 @@ def handle_message(event):
             idx = int(num_str)
             try:
                 success = delete_memo(idx)
-                reply = f"📝 {idx}番のメモを削除したよ！🍍" if success else "📝 その番号のメモはないよ！"
+                reply = f"📝 {idx}番のメモを削除したよ🍍" if success else "📝 その番号のメモは見当たらないわ！"
             except Exception as e:
-                reply = f"📝 削除失敗: {e}"
+                reply = f"📝 削除に失敗しちゃった…: {e}"
         else:
-            reply = "📝 番号で指定してね！\n例：「メモ削除1」"
+            reply = "📝 番号でご指定ね！\n例：「メモ削除1」"
     else:
         try:
             add_memo(text)
-            reply = f"📝 メモしたよ！BOSS🍍\n「{text}」\n\n確認は「メモ確認」で！"
+            reply = f"📝 メモしておいたよ！BOSS🍍\n「{text}」\n\n確認は「メモ確認」でどうぞ！"
         except Exception:
-            reply = f"📝 メモしました！\n「{text}」🍍"
+            reply = f"📝 メモしておいたよ！\n「{text}」🍍"
 
     with ApiClient(configuration) as api_client:
         MessagingApi(api_client).reply_message(
@@ -683,7 +683,7 @@ def handle_message(event):
 
 @app.route("/")
 def index():
-    return "Chris 稼働中 ✅🤙"
+    return "ソフィ 稼働中 ✅🍍"
 
 if __name__ == "__main__":
     threading.Thread(target=run_scheduler, daemon=True).start()
