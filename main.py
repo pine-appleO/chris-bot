@@ -508,12 +508,14 @@ def handle_message(event):
         return any(t.startswith(k.lower()) or t == k.lower() for k in keywords)
 
     if match(["おはよう", "アロハ", "朝", "morning"]):
-        try:
-            reply = build_morning_message()
-        except Exception as e:
-            print(f"[ERROR] build_morning_message failed: {e}")
-            import traceback; traceback.print_exc()
-            reply = f"アロハ🤙 BOSS！ソフィよ！\n朝のまとめ取得中にエラーが出たわ😭\nエラー：{e}"
+        def _send_morning():
+            try:
+                send_to_user(build_morning_message())
+            except Exception as e:
+                print(f"[ERROR] build_morning_message failed: {e}")
+                send_to_user(f"朝のまとめ取得中にエラーが出たわ😭\nエラー：{e}")
+        threading.Thread(target=_send_morning, daemon=True).start()
+        reply = "少し待ってね🍍データ集めてくるね！"
     elif match(["明日の予定", "明日", "tomorrow"]):
         reply = build_tomorrow_schedule()
     elif match(["天気", "weather"]):
