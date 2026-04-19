@@ -456,7 +456,13 @@ def build_tomorrow_schedule():
             events.append(f"  🍍 {event['name']}")
     event_text = "\n".join(events)
 
+    tomorrow_str = tomorrow.strftime("%Y-%m-%d")
+    sheet_events = [v[1] if len(v) > 1 else "" for v in get_store_visits() if v and v[0] == tomorrow_str]
+    sheet_text = "\n".join(f"  📅 {s}" for s in sheet_events)
+
     msg = f"明日 {date_str} の予定 🏝️\n\n━━━ タスク ━━━\n{task_text}"
+    if sheet_text:
+        msg += f"\n\n━━━ 登録済み予定 ━━━\n{sheet_text}"
     if event_text:
         msg += f"\n\n━━━ 特別予定 ━━━\n{event_text}"
     return msg
