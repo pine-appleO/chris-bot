@@ -1,4 +1,5 @@
 import os
+import json
 import threading
 import time
 import requests
@@ -14,6 +15,9 @@ from linebot.v3.messaging import (
 from linebot.v3.webhooks import MessageEvent, TextMessageContent
 import pytz
 import schedule
+from google.oauth2 import service_account
+from google.analytics.data_v1beta import BetaAnalyticsDataClient
+from google.analytics.data_v1beta.types import RunReportRequest, DateRange, Metric, Dimension
 
 app = Flask(__name__)
 
@@ -22,6 +26,8 @@ LINE_SECRET = os.environ.get("LINE_CHANNEL_SECRET", "")
 USER_ID     = os.environ.get("LINE_USER_ID", "")
 IG_TOKEN    = os.environ.get("INSTAGRAM_ACCESS_TOKEN", "")
 IG_USER_ID  = os.environ.get("INSTAGRAM_USER_ID", "")
+GA4_PROPERTY_ID = os.environ.get("GA4_PROPERTY_ID", "313654685")
+GA4_SERVICE_ACCOUNT_JSON = os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON", "")
 
 configuration = Configuration(access_token=LINE_TOKEN)
 handler = WebhookHandler(LINE_SECRET)
@@ -123,6 +129,39 @@ def get_monthly_ig_summary():
     except Exception:
         return "📱 Instagram 取得失敗"
 
+# ── GA4 ───────────────────────────────────────────────────────────
+def get_ga4_yesterday():
+    if not GA4_SERVICE_ACCOUNT_JSON:
+        return "🌐 GA4 未設定"
+    try:
+        creds_dict = json.loads(GA4_SERVICE_ACCOUNT_JSON)
+        creds = service_account.Credentials.from_service_account_info(
+            creds_dict, scopes=["https://www.googleapis.com/auth/analytics.readonly"]
+        )
+        client = BetaAnalyticsDataClient(credentials=creds)
+        request_obj = RunReportRequest(
+            property=f"properties/{GA4_PROPERTY_ID}",
+            date_ranges=[DateRange(start_date="yesterday", end_date="yesterday")],
+            metrics=[
+                Metric(name="sessions"),
+                Metric(name="activeUsers"),
+                Metric(name="screenPageViews"),
+            ],
+        )
+        response = client.run_report(request_obj)
+        row = response.rows[0].metric_values if response.rows else None
+        if not row:
+            return "🌐 HP：昨日のデータなし"
+        sessions   = row[0].value
+        users      = row[1].value
+        pageviews  = row[2].value
+        return (f"🌐 ホームページ 昨日\n"
+                f"  👤 ユーザー：{users}人\n"
+                f"  🔄 セッション：{sessions}\n"
+                f"  📄 ページビュー：{pageviews}")
+    except Exception as e:
+        return f"🌐 GA4 取得失敗: {e}"
+
 # ── 特別予定リマインド ──────────────────────────────────────────
 def get_upcoming_events(days_ahead=3):
     now = datetime.now(JST).date()
@@ -150,6 +189,7 @@ def build_morning_message():
     task_text = "\n".join(f"  • {t}" for t in tasks)
 
     ig   = get_instagram_yesterday()
+    ga4  = get_ga4_yesterday()
     fact = BEEF_FACTS[BEEF_FACT_IDX[0] % len(BEEF_FACTS)]
     BEEF_FACT_IDX[0] += 1
 
@@ -161,6 +201,7 @@ def build_morning_message():
             f"{event_section}\n"
             f"━━━ 今日のタスク ━━━\n{task_text}\n\n"
             f"━━━ 昨日のインスタ ━━━\n{ig}\n\n"
+            f"━━━ 昨日のHP ━━━\n{ga4}\n\n"
             f"━━━ 今日の牛ネタ 🥩 ━━━\n{fact}\n\n"
             f"今日もよろしく！🏝️")
 
@@ -254,6 +295,8 @@ def handle_message(event):
         reply = get_weather("Yokohama", "横浜") + "\n" + get_weather("Sodegaura", "袖ヶ浦のぞみ野")
     elif match(["インスタ", "instagram", "IG"]):
         reply = get_instagram_yesterday()
+    elif match(["HP", "ホームページ", "GA4", "サイト"]):
+        reply = get_ga4_yesterday()
     elif match(["月報", "レポート", "report"]):
         reply = build_monthly_report()
     elif match(["タスク", "todo", "今日"]):
