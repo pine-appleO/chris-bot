@@ -47,12 +47,17 @@ JST = pytz.timezone("Asia/Tokyo")
 secretary_mode = {"active": False, "entry": False}
 
 # ── Google Sheets（店訪問管理）────────────────────────────────────────
+_sheets_svc_cache = None
+
 def _sheets_service():
-    creds_dict = json.loads(GA4_SERVICE_ACCOUNT_JSON)
-    creds = service_account.Credentials.from_service_account_info(
-        creds_dict, scopes=["https://www.googleapis.com/auth/spreadsheets"]
-    )
-    return build("sheets", "v4", credentials=creds)
+    global _sheets_svc_cache
+    if _sheets_svc_cache is None:
+        creds_dict = json.loads(GA4_SERVICE_ACCOUNT_JSON)
+        creds = service_account.Credentials.from_service_account_info(
+            creds_dict, scopes=["https://www.googleapis.com/auth/spreadsheets"]
+        )
+        _sheets_svc_cache = build("sheets", "v4", credentials=creds)
+    return _sheets_svc_cache
 
 def _parse_visit_date(text):
     """「4/25」や「04-25」→ YYYY-MM-DD"""
@@ -145,24 +150,34 @@ def delete_memo(index):
         ).execute()
     return True
 
+_stats_rows_cache = None  # 統計タブを1回だけ読み込んでキャッシュ
+
+def _ensure_stats_cache():
+    global _stats_rows_cache
+    if _stats_rows_cache is None:
+        try:
+            _stats_rows_cache = _sheets_service().spreadsheets().values().get(
+                spreadsheetId=GOOGLE_SHEET_ID, range=f"{STATS_TAB}!A:B"
+            ).execute().get("values", [])
+        except Exception:
+            _stats_rows_cache = []
+
 def get_stat(key):
     try:
-        rows = _sheets_service().spreadsheets().values().get(
-            spreadsheetId=GOOGLE_SHEET_ID, range=f"{STATS_TAB}!A:B"
-        ).execute().get("values", [])
-        for row in rows:
+        _ensure_stats_cache()
+        for row in _stats_rows_cache:
             if row and row[0] == key:
                 return row[1] if len(row) > 1 else None
     except Exception:
         return None
 
 def set_stat(key, value):
+    global _stats_rows_cache
     try:
-        rows = _sheets_service().spreadsheets().values().get(
-            spreadsheetId=GOOGLE_SHEET_ID, range=f"{STATS_TAB}!A:B"
-        ).execute().get("values", [])
-        for i, row in enumerate(rows):
+        _ensure_stats_cache()
+        for i, row in enumerate(_stats_rows_cache):
             if row and row[0] == key:
+                _stats_rows_cache[i] = [key, str(value)]
                 _sheets_service().spreadsheets().values().update(
                     spreadsheetId=GOOGLE_SHEET_ID,
                     range=f"{STATS_TAB}!B{i+1}",
@@ -170,6 +185,7 @@ def set_stat(key, value):
                     body={"values": [[str(value)]]}
                 ).execute()
                 return
+        _stats_rows_cache.append([key, str(value)])
         _sheets_service().spreadsheets().values().append(
             spreadsheetId=GOOGLE_SHEET_ID, range=f"{STATS_TAB}!A:B",
             valueInputOption="RAW", body={"values": [[key, str(value)]]}
