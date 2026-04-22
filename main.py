@@ -535,22 +535,32 @@ def send_to_user(text):
 
 # ── スケジューラー ─────────────────────────────────────────────────
 def run_scheduler():
-    schedule.every().day.at("07:00").do(lambda: send_to_user(build_morning_message()))
-
-    def reminder_check():
-        msg = get_upcoming_events(3)
-        if msg:
-            send_to_user(f"🍍 リマインド！\n{msg}")
-
-    def monthly_report_check():
-        if (datetime.now(JST) + timedelta(days=1)).day == 1:
-            send_to_user(build_monthly_report())
-
-    schedule.every().day.at("09:00").do(reminder_check)
-    schedule.every().day.at("22:00").do(monthly_report_check)
+    last_morning  = None
+    last_reminder = None
+    last_report   = None
 
     while True:
-        schedule.run_pending()
+        now   = datetime.now(JST)
+        today = now.date()
+        hhmm  = (now.hour, now.minute)
+
+        if hhmm == (7, 0) and last_morning != today:
+            last_morning = today
+            threading.Thread(
+                target=lambda: send_to_user(build_morning_message()), daemon=True
+            ).start()
+
+        if hhmm == (9, 0) and last_reminder != today:
+            last_reminder = today
+            msg = get_upcoming_events(3)
+            if msg:
+                send_to_user(f"🍍 リマインド！\n{msg}")
+
+        if hhmm == (22, 0) and last_report != today:
+            last_report = today
+            if (now + timedelta(days=1)).day == 1:
+                send_to_user(build_monthly_report())
+
         time.sleep(30)
 
 # ── Webhook ────────────────────────────────────────────────────────
