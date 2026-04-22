@@ -291,10 +291,22 @@ def get_hawaii_news():
 # Suno残高（LINEコマンド「Suno 200」で更新）
 suno_state = {"balance": None, "updated_at": None}
 
+def _load_suno_from_sheets():
+    try:
+        bal = get_stat("suno_balance")
+        upd = get_stat("suno_updated_at")
+        if bal:
+            suno_state["balance"] = int(bal)
+            suno_state["updated_at"] = datetime.fromisoformat(upd) if upd else None
+    except Exception:
+        pass
+
 def get_suno_section():
     now = datetime.now(JST)
     if (now.day - 1) % 3 != 0:
         return ""
+    if suno_state["balance"] is None:
+        _load_suno_from_sheets()
     if suno_state["balance"] is None:
         return "━━━ 🎵 Suno残高 ━━━\n  未設定　「Suno 200」みたいに送って！\n"
     bal = suno_state["balance"]
@@ -685,6 +697,8 @@ def handle_message(event):
         if num_str.isdigit():
             suno_state["balance"] = int(num_str)
             suno_state["updated_at"] = datetime.now(JST)
+            set_stat("suno_balance", num_str)
+            set_stat("suno_updated_at", suno_state["updated_at"].isoformat())
             reply = f"🎵 Suno残高を{num_str}クレジットに更新したよ！3日おきに朝お知らせしますね🍍"
         else:
             bal = suno_state["balance"]
