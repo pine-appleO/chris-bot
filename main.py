@@ -1,4 +1,5 @@
 import os
+import re
 import json
 import threading
 import time
@@ -718,6 +719,18 @@ def handle_message(event):
                 reply = "📅 日付は「4/25」の形式で送ってね！\n例：「予定 4/25 撮影」"
         else:
             reply = "📅 「予定 4/25 撮影」の形式でお送りね！"
+    elif re.match(r"^\d{1,2}[/\-]\d{1,2}\s+\S", text):
+        parts = text.split(None, 1)
+        date_str = _parse_visit_date(parts[0])
+        memo = parts[1] if len(parts) > 1 else ""
+        if date_str and memo:
+            try:
+                add_store_visit(date_str, memo)
+                reply = f"📅 予定を登録したよ🍍\n{date_str} {memo}"
+            except Exception as e:
+                reply = f"📅 登録に失敗しちゃった…: {e}"
+        else:
+            reply = "📅 「4/25 撮影」の形式で送ってね！"
     elif match(["予定確認"]):
         visits = get_store_visits()
         if not visits:
