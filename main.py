@@ -551,28 +551,43 @@ def run_scheduler():
     last_morning  = None
     last_reminder = None
     last_report   = None
+    last_yt_remind = None
 
     while True:
         now   = datetime.now(JST)
         today = now.date()
         hhmm  = (now.hour, now.minute)
 
-        if hhmm == (7, 0) and last_morning != today:
+        if now.hour == 7 and last_morning != today:
             last_morning = today
             threading.Thread(
                 target=lambda: send_to_user(build_morning_message()), daemon=True
             ).start()
 
-        if hhmm == (9, 0) and last_reminder != today:
+        if now.hour == 9 and last_reminder != today:
             last_reminder = today
             msg = get_upcoming_events(3)
             if msg:
                 send_to_user(f"🍍 リマインド！\n{msg}")
 
-        if hhmm == (22, 0) and last_report != today:
+        if now.hour == 22 and last_report != today:
             last_report = today
             if (now + timedelta(days=1)).day == 1:
                 send_to_user(build_monthly_report())
+
+        if now.hour == 13 and now.weekday() == 6 and last_yt_remind != today:
+            last_yt_remind = today
+            send_to_user(
+                "🎬 週次YouTubeデータ収集のお時間よ！BOSS🍍\n\n"
+                "① YouTube Studio を開く\n"
+                "   → studio.youtube.com\n\n"
+                "② アナリティクス → 詳細モード\n"
+                "   → 右上のダウンロードボタン\n"
+                "   → CSVを保存\n\n"
+                "③ ターミナルで実行\n"
+                "   python3 ~/Downloads/create_sheet.py\n\n"
+                "データが貯まるほど分析が深くなるよ！🤙"
+            )
 
         time.sleep(30)
 
