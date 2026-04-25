@@ -560,16 +560,9 @@ def run_scheduler():
 
         if now.hour == 7 and last_morning != today:
             last_morning = today
-            def _auto_morning():
-                import concurrent.futures
-                try:
-                    with concurrent.futures.ThreadPoolExecutor() as ex:
-                        msg = ex.submit(build_morning_message).result(timeout=25)
-                    send_to_user(msg)
-                except Exception as e:
-                    send_to_user(f"アロハ🤙BOSS！ソフィよ！\n朝のまとめ取得中にエラーが出たわ😭\n「アロハ」って送ってみて！")
-                    print(f"[SCHEDULER] morning error: {e}")
-            threading.Thread(target=_auto_morning, daemon=True).start()
+            threading.Thread(
+                target=lambda: send_to_user(build_morning_message()), daemon=True
+            ).start()
 
         if now.hour == 9 and last_reminder != today:
             last_reminder = today
@@ -823,6 +816,20 @@ def handle_message(event):
 @app.route("/")
 def index():
     return "ソフィ 稼働中 ✅🍍"
+
+@app.route("/morning")
+def morning_trigger():
+    def _send():
+        import concurrent.futures
+        try:
+            with concurrent.futures.ThreadPoolExecutor() as ex:
+                msg = ex.submit(build_morning_message).result(timeout=25)
+            send_to_user(msg)
+        except Exception as e:
+            send_to_user("アロハ🤙BOSS！ソフィよ！\n朝のまとめ取得中にエラーが出たわ😭\n「アロハ」って送ってみて！")
+            print(f"[MORNING] error: {e}")
+    threading.Thread(target=_send, daemon=True).start()
+    return "OK"
 
 if __name__ == "__main__":
     threading.Thread(target=run_scheduler, daemon=True).start()
