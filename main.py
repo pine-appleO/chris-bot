@@ -560,9 +560,16 @@ def run_scheduler():
 
         if now.hour == 7 and last_morning != today:
             last_morning = today
-            threading.Thread(
-                target=lambda: send_to_user(build_morning_message()), daemon=True
-            ).start()
+            def _auto_morning():
+                import concurrent.futures
+                try:
+                    with concurrent.futures.ThreadPoolExecutor() as ex:
+                        msg = ex.submit(build_morning_message).result(timeout=25)
+                    send_to_user(msg)
+                except Exception as e:
+                    send_to_user(f"アロハ🤙BOSS！ソフィよ！\n朝のまとめ取得中にエラーが出たわ😭\n「アロハ」って送ってみて！")
+                    print(f"[SCHEDULER] morning error: {e}")
+            threading.Thread(target=_auto_morning, daemon=True).start()
 
         if now.hour == 9 and last_reminder != today:
             last_reminder = today
