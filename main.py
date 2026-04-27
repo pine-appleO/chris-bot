@@ -475,9 +475,6 @@ def build_morning_message():
         tasks = [store_today] + tasks
     task_text = "\n".join(f"  • {t}" for t in tasks)
 
-    ig   = get_instagram_yesterday()
-    ga4  = get_ga4_yesterday()
-    yt   = get_youtube_stats()
     honolulu = get_weather("Honolulu", "ホノルル")
     hawaii_news = get_hawaii_news()
     fact = f"━━━ 🏝️ ハワイ情報 ━━━\n{honolulu}\n{hawaii_news}"
@@ -490,9 +487,6 @@ def build_morning_message():
             f"{yokohama}\n{sodegaura}\n"
             f"{event_section}\n"
             f"━━━ 今日のタスク ━━━\n{task_text}\n\n"
-            f"━━━ 昨日のインスタ ━━━\n{ig}\n\n"
-            f"━━━ 昨日のHP ━━━\n{ga4}\n\n"
-            f"━━━ YouTube ━━━\n{yt}\n\n"
             f"{suno_section}"
             f"{fact}\n\n"
             f"今日も一緒に頑張ろうね！Mahalo🏝️")
