@@ -304,8 +304,6 @@ def _load_suno_from_sheets():
 
 def get_suno_section():
     now = datetime.now(JST)
-    if (now.day - 1) % 3 != 0:
-        return ""
     if suno_state["balance"] is None:
         _load_suno_from_sheets()
     if suno_state["balance"] is None:
