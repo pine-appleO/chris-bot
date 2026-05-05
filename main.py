@@ -327,7 +327,7 @@ WEATHER_EMOJI = {
 def get_weather(location, city_name):
     try:
         url = f"https://wttr.in/{location}?format=j1"
-        r = requests.get(url, timeout=5).json()
+        r = requests.get(url, timeout=10).json()
         current = r["current_condition"][0]
         temp_c  = current["temp_C"]
         feels_c = current["FeelsLikeC"]
