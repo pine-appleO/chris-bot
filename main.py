@@ -538,6 +538,18 @@ def send_to_user(text):
     except Exception as e:
         print(f"送信失敗: {e}")
 
+def send_image_to_user(image_url):
+    from linebot.v3.messaging import ImageMessage
+    try:
+        with ApiClient(configuration) as api_client:
+            MessagingApi(api_client).push_message(
+                PushMessageRequest(to=USER_ID, messages=[
+                    ImageMessage(original_content_url=image_url, preview_image_url=image_url)
+                ])
+            )
+    except Exception as e:
+        print(f"画像送信失敗: {e}")
+
 # ── スケジューラー ─────────────────────────────────────────────────
 def run_scheduler():
     last_morning  = None
@@ -817,6 +829,8 @@ def morning_trigger():
             with concurrent.futures.ThreadPoolExecutor() as ex:
                 msg = ex.submit(build_morning_message).result(timeout=25)
             send_to_user(msg)
+            if datetime.now(JST).weekday() == 0:
+                send_image_to_user("https://raw.githubusercontent.com/pine-appleO/chris-bot/main/weekly_routine.png")
         except Exception as e:
             send_to_user("アロハ🤙BOSS！ソフィよ！\n朝のまとめ取得中にエラーが出たわ😭\n「アロハ」って送ってみて！")
             print(f"[MORNING] error: {e}")
