@@ -830,7 +830,7 @@ def morning_trigger():
                 msg = ex.submit(build_morning_message).result(timeout=25)
             send_to_user(msg)
             if datetime.now(JST).weekday() == 0:
-                send_image_to_user("https://raw.githubusercontent.com/pine-appleO/chris-bot/main/weekly_routine.png")
+                send_image_to_user("https://raw.githubusercontent.com/pine-appleO/chris-bot/main/hf_20260510_135915_36ce56d3-a985-4dd2-89ff-d97cdbdbe79d.png")
         except Exception as e:
             send_to_user("アロハ🤙BOSS！ソフィよ！\n朝のまとめ取得中にエラーが出たわ😭\n「アロハ」って送ってみて！")
             print(f"[MORNING] error: {e}")
