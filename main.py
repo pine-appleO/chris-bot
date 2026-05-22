@@ -277,15 +277,29 @@ def _translate_to_ja(text):
 def get_hawaii_news():
     try:
         import xml.etree.ElementTree as ET
-        url = "https://news.google.com/rss/search?q=hawaii+local+news&hl=en-US&gl=US&ceid=US:en"
-        r = requests.get(url, timeout=5)
-        root = ET.fromstring(r.content)
-        items = root.findall("./channel/item")
+        urls = [
+            "https://www.hawaiinewsnow.com/rss/",
+            "https://news.google.com/rss/search?q=hawaii&hl=en-US&gl=US&ceid=US:en",
+        ]
+        items = []
+        for url in urls:
+            try:
+                r = requests.get(url, timeout=8)
+                root = ET.fromstring(r.content)
+                items = root.findall("./channel/item")
+                if items:
+                    break
+            except Exception:
+                continue
         if not items:
             return "🏝️ ハワイニュース取得できなかったわ😭"
-        title_en = items[0].findtext("title", "").split(" - ")[0].strip()
-        title_ja = _translate_to_ja(title_en)
-        return f"🏝️ 今日のハワイニュース\n  「{title_ja}」\n  （Hawaii News Now より）"
+        lines = []
+        for item in items[:3]:
+            title_en = item.findtext("title", "").split(" - ")[0].strip()
+            if title_en:
+                title_ja = _translate_to_ja(title_en)
+                lines.append(f"  ・{title_ja}")
+        return "🏝️ 今日のハワイニュース\n" + "\n".join(lines)
     except Exception:
         return "🏝️ ハワイニュース取得できなかったわ😭"
 
@@ -825,6 +839,8 @@ def index():
 def morning_trigger():
     def _send():
         import concurrent.futures
+        import gc
+        global _sheets_svc_cache, _stats_rows_cache
         try:
             with concurrent.futures.ThreadPoolExecutor() as ex:
                 msg = ex.submit(build_morning_message).result(timeout=25)
@@ -834,6 +850,10 @@ def morning_trigger():
         except Exception as e:
             send_to_user("アロハ🤙BOSS！ソフィよ！\n朝のまとめ取得中にエラーが出たわ😭\n「アロハ」って送ってみて！")
             print(f"[MORNING] error: {e}")
+        finally:
+            _sheets_svc_cache = None
+            _stats_rows_cache = None
+            gc.collect()
     threading.Thread(target=_send, daemon=True).start()
     return "OK"
 
