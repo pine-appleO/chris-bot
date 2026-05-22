@@ -471,6 +471,9 @@ def get_upcoming_events(days_ahead=3):
             lines.append(f"🏝️ 今日は{event['name']}の日！")
     return "\n".join(lines) if lines else ""
 
+# ── iOSカレンダー（Shortcutから受け取る）──────────────────────────
+_today_calendar = {"date": None, "events": []}
+
 # ── 朝のメッセージ ────────────────────────────────────────────────
 def build_morning_message():
     now = datetime.now(JST)
@@ -485,6 +488,10 @@ def build_morning_message():
     store_today = get_today_store_visit()
     if store_today:
         tasks = [store_today] + tasks
+    today_str = now.strftime("%Y-%m-%d")
+    if _today_calendar["date"] == today_str and _today_calendar["events"]:
+        for e in _today_calendar["events"]:
+            tasks.insert(0, f"📅 {e}")
     task_text = "\n".join(f"  • {t}" for t in tasks)
 
     honolulu = get_weather("Honolulu", "ホノルル")
@@ -834,6 +841,16 @@ def handle_message(event):
 @app.route("/")
 def index():
     return "ソフィ 稼働中 ✅🍍"
+
+@app.route("/calendar", methods=["POST"])
+def calendar_update():
+    global _today_calendar
+    data = request.get_json(silent=True) or {}
+    events = data.get("events", [])
+    today_str = datetime.now(JST).strftime("%Y-%m-%d")
+    _today_calendar = {"date": today_str, "events": events}
+    print(f"[CALENDAR] {today_str}: {events}")
+    return "OK"
 
 @app.route("/morning")
 def morning_trigger():
