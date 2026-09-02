@@ -4,7 +4,8 @@ import json
 import threading
 import time
 import requests
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, time as dtime
+from urllib.parse import quote
 from googleapiclient.discovery import build
 from flask import Flask, request, abort
 from linebot.v3 import WebhookHandler
@@ -18,6 +19,7 @@ from linebot.v3.webhooks import MessageEvent, TextMessageContent
 import pytz
 import schedule
 from google.oauth2 import service_account
+from google.auth.transport.requests import Request as GoogleAuthRequest
 from google.analytics.data_v1beta import BetaAnalyticsDataClient
 from google.analytics.data_v1beta.types import RunReportRequest, DateRange, Metric, Dimension
 
@@ -36,6 +38,10 @@ YOUTUBE_CHANNELS = {
     "pinea_ppleO": "UCDXLRuSiPGk1kR_vq9C_iag",
 }
 GOOGLE_SHEET_ID = os.environ.get("GOOGLE_SHEET_ID", "")
+USHIURARA_CAL_ID = os.environ.get(
+    "USHIURARA_CALENDAR_ID",
+    "c_e39506df6d969d6017c6857b00fdd73991499700d16379e06ff4304f76c163a3@group.calendar.google.com",
+)
 SHEET_TAB = "予定"
 MEMO_TAB = "メモ"
 STATS_TAB = "統計"
@@ -239,10 +245,10 @@ def get_today_store_visit():
 
 # ── 週別タスク ─────────────────────────────────────────────────────
 WEEKLY_TASKS = {
-    0: ["📤 インスタ動画投稿（うしうらら）", "📖 ストーリー投稿", "📊 先週インスタ数値確認", "🎬 19:00投稿｜R&B｜英語（Shorts＋TikTok）", "📊 YLCBデータ入力して！"],
+    0: ["📖 ストーリー投稿", "📊 先週インスタ数値確認", "🎬 19:00投稿｜R&B｜英語（Shorts＋TikTok）", "📊 YLCBデータ入力して！"],
     1: ["📖 ストーリー投稿", "🎬 19:00投稿｜Chill House｜英語（Shorts＋TikTok）"],
     2: ["📖 ストーリー投稿", "🎬 19:00投稿｜R&B｜英語（Shorts＋TikTok）"],
-    3: ["📷 インスタ画像投稿（うしうらら）", "📖 ストーリー投稿", "🎬 19:00投稿｜City Pop｜日本語（Shorts＋TikTok）"],
+    3: ["📖 ストーリー投稿", "🎬 19:00投稿｜City Pop｜日本語（Shorts＋TikTok）"],
     4: ["📖 ストーリー投稿", "🎬 動画編集 or 🎵 音楽制作"],
     5: ["📖 ストーリー投稿"],
     6: ["📖 ストーリー投稿", "🎬 17:00投稿｜Chill House｜日本語（Shorts＋TikTok）"],
@@ -471,6 +477,49 @@ def get_upcoming_events(days_ahead=3):
             lines.append(f"🏝️ 今日は{event['name']}の日！")
     return "\n".join(lines) if lines else ""
 
+# ── うしうらら運用スケジュール（Googleカレンダー）──────────────────
+def _gcal_token():
+    """サービスアカウントのアクセストークン。discovery を使わないので軽い。"""
+    creds = service_account.Credentials.from_service_account_info(
+        json.loads(GA4_SERVICE_ACCOUNT_JSON),
+        scopes=["https://www.googleapis.com/auth/calendar.readonly"],
+    )
+    creds.refresh(GoogleAuthRequest())
+    return creds.token
+
+def get_calendar_tasks(target_date):
+    """指定日の運用スケジュールを ["10:00 【投稿】…", …] で返す"""
+    if not GA4_SERVICE_ACCOUNT_JSON:
+        return []
+    try:
+        start = JST.localize(datetime.combine(target_date, dtime(0, 0)))
+        end = start + timedelta(days=1)
+        r = requests.get(
+            f"https://www.googleapis.com/calendar/v3/calendars/{quote(USHIURARA_CAL_ID)}/events",
+            headers={"Authorization": f"Bearer {_gcal_token()}"},
+            params={
+                "timeMin": start.isoformat(),
+                "timeMax": end.isoformat(),
+                "singleEvents": "true",
+                "orderBy": "startTime",
+                "timeZone": "Asia/Tokyo",
+                "maxResults": 20,
+                "fields": "items(summary,start)",
+            },
+            timeout=10,
+        )
+        out = []
+        for it in r.json().get("items", []):
+            title = (it.get("summary") or "").strip()
+            if not title:
+                continue
+            dt = it.get("start", {}).get("dateTime")
+            out.append(f"{dt[11:16]} {title}" if dt else title)
+        return out
+    except Exception as e:
+        print(f"[GCAL] error: {e}")
+        return []
+
 # ── iOSカレンダー（Shortcutから受け取る）──────────────────────────
 _today_calendar = {"date": None, "events": []}
 
@@ -498,6 +547,12 @@ def build_morning_message():
     hawaii_news = get_hawaii_news()
     fact = f"━━━ 🏝️ ハワイ情報 ━━━\n{honolulu}\n{hawaii_news}"
 
+    cal_tasks = get_calendar_tasks(now.date())
+    cal_section = ""
+    if cal_tasks:
+        cal_body = "\n".join(f"  • {t}" for t in cal_tasks)
+        cal_section = f"━━━ 🥩 うしうらら運用 ━━━\n{cal_body}\n\n"
+
     events = get_upcoming_events(3)
     event_section = f"\n━━━ 🍍 近日予定 ━━━\n{events}\n" if events else ""
     suno_section = get_suno_section()
@@ -505,6 +560,7 @@ def build_morning_message():
     return (f"アロハ🤙 BOSS！ソフィよ！\n{date_str}\n\n"
             f"{yokohama}\n{sodegaura}\n"
             f"{event_section}\n"
+            f"{cal_section}"
             f"━━━ 今日のタスク ━━━\n{task_text}\n\n"
             f"{suno_section}"
             f"{fact}\n\n"
@@ -531,7 +587,12 @@ def build_tomorrow_schedule():
     sheet_events = [v[1] if len(v) > 1 else "" for v in get_store_visits() if v and v[0] == tomorrow_str]
     sheet_text = "\n".join(f"  📅 {s}" for s in sheet_events)
 
-    msg = f"明日 {date_str} の予定 🏝️\n\n━━━ タスク ━━━\n{task_text}"
+    cal_tasks = get_calendar_tasks(tomorrow.date())
+    msg = f"明日 {date_str} の予定 🏝️"
+    if cal_tasks:
+        cal_body = "\n".join(f"  • {t}" for t in cal_tasks)
+        msg += f"\n\n━━━ 🥩 うしうらら運用 ━━━\n{cal_body}"
+    msg += f"\n\n━━━ タスク ━━━\n{task_text}"
     if sheet_text:
         msg += f"\n\n━━━ 登録済み予定 ━━━\n{sheet_text}"
     if event_text:
