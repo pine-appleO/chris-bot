@@ -283,28 +283,43 @@ def _translate_to_ja(text):
 def get_hawaii_news():
     try:
         import xml.etree.ElementTree as ET
-        urls = [
-            "https://www.hawaiinewsnow.com/rss/",
-            "https://news.google.com/rss/search?q=hawaii&hl=en-US&gl=US&ceid=US:en",
-        ]
         items = []
-        for url in urls:
-            try:
-                r = requests.get(url, timeout=8)
-                root = ET.fromstring(r.content)
-                items = root.findall("./channel/item")
-                if items:
-                    break
-            except Exception:
-                continue
+        is_japanese = False
+        # 日本語Google Newsを優先（翻訳不要）
+        try:
+            r = requests.get(
+                "https://news.google.com/rss/search?q=hawaii&hl=ja&gl=JP&ceid=JP:ja",
+                timeout=8
+            )
+            root = ET.fromstring(r.content)
+            items = root.findall("./channel/item")
+            if items:
+                is_japanese = True
+        except Exception:
+            pass
+        # フォールバック：英語RSS＋翻訳
+        if not items:
+            for url in [
+                "https://www.hawaiinewsnow.com/rss/",
+                "https://news.google.com/rss/search?q=hawaii&hl=en-US&gl=US&ceid=US:en",
+            ]:
+                try:
+                    r = requests.get(url, timeout=8)
+                    root = ET.fromstring(r.content)
+                    items = root.findall("./channel/item")
+                    if items:
+                        break
+                except Exception:
+                    continue
         if not items:
             return "🏝️ ハワイニュース取得できなかったわ😭"
         lines = []
         for item in items[:3]:
-            title_en = item.findtext("title", "").split(" - ")[0].strip()
-            if title_en:
-                title_ja = _translate_to_ja(title_en)
-                lines.append(f"  ・{title_ja}")
+            title = item.findtext("title", "").split(" - ")[0].strip()
+            if title:
+                if not is_japanese:
+                    title = _translate_to_ja(title)
+                lines.append(f"  ・{title}")
         return "🏝️ 今日のハワイニュース\n" + "\n".join(lines)
     except Exception:
         return "🏝️ ハワイニュース取得できなかったわ😭"
