@@ -1,6 +1,7 @@
 import os
 import re
 import json
+import unicodedata
 import threading
 import time
 import requests
@@ -244,29 +245,34 @@ def get_today_store_visit():
     return ""
 
 # ── 週別タスク ─────────────────────────────────────────────────────
+# うしうららの投稿・準備完了は「うしうらら運用スケジュール」カレンダーから出る（ここには書かない）
+# YouTube（Lofi）は休憩中（2026-10-26）
 WEEKLY_TASKS = {
-    0: ["📖 ストーリー投稿", "📊 先週インスタ数値確認", "🎬 19:00投稿｜R&B｜英語（Shorts＋TikTok）", "📊 YLCBデータ入力して！"],
-    1: ["📖 ストーリー投稿", "🎬 19:00投稿｜Chill House｜英語（Shorts＋TikTok）"],
-    2: ["📖 ストーリー投稿", "🎬 19:00投稿｜R&B｜英語（Shorts＋TikTok）"],
-    3: ["📖 ストーリー投稿", "🎬 19:00投稿｜City Pop｜日本語（Shorts＋TikTok）"],
-    4: ["📖 ストーリー投稿", "🎬 動画編集 or 🎵 音楽制作"],
+    0: ["📖 ストーリー投稿", "📊 先週インスタ数値確認"],
+    1: ["📖 ストーリー投稿"],
+    2: ["📖 ストーリー投稿"],
+    3: ["📖 ストーリー投稿"],
+    4: ["📖 ストーリー投稿"],
     5: ["📖 ストーリー投稿"],
-    6: ["📖 ストーリー投稿", "🎬 17:00投稿｜Chill House｜日本語（Shorts＋TikTok）"],
+    6: ["📖 ストーリー投稿"],
 }
 
 MONTHLY_TASKS = {
-    1:  ["🗓️ 月初：先月の数値まとめ", "📋 今月の目標設定"],
-    9:  ["🎵 明日Sunoクレジット2500にリセット！今日中に使い切ろう🍍"],
+    1:  ["🎵 Sunoのクレジットと残りダウンロード数を確認して「Suno 2380 20」みたいに送ってね（クレジット→ダウンロードの順）。作りだめするBGMはソフィが集めるよ🍍"],
+    2:  ["📊 本気シートの月次総括メールが届く日"],
+    5:  ["📄 うしうらら月次報告書のメールが届く日", "🗓️ 税理士さんとの打ち合わせ（月末）はいつになった？ソフィに教えてね"],
+    9:  ["🎵 明日10日にSunoがリセット！残っていたら今日中にBGMを作りだめしよう🍍"],
+    10: ["✉️ 関内会計へ先月分の資料メール（10日以降・下書きはソフィ）", "💴 税金の支払い（10日目安）"],
     15: ["📊 月半：インスタ数値確認"],
 }
 
 # 特別予定（3日前から毎朝リマインドが届く）
 SPECIAL_EVENTS = [
-    {"date": "2026-07-21", "name": "横浜撮影1日目"},
-    {"date": "2026-07-22", "name": "横浜撮影2日目"},
-    {"date": "2026-10-19", "name": "横浜撮影1日目"},
-    {"date": "2026-10-20", "name": "横浜撮影2日目"},
-    {"date": "2026-10-21", "name": "横浜撮影3日目"},
+    {"date": "2026-11-05", "name": "合同ミーティング"},
+    {"date": "2026-11-20", "name": "ホテル再訪"},
+    {"date": "2026-11-29", "name": "いい肉の日（会員限定）"},
+    {"date": "2026-12-03", "name": "冬コース開始"},
+    {"date": "2026-12-19", "name": "クリスマス営業スタート（〜12/25）"},
 ]
 
 def _translate_to_ja(text):
@@ -314,7 +320,7 @@ def get_hawaii_news():
         if not items:
             return "🏝️ ハワイニュース取得できなかったわ😭"
         lines = []
-        for item in items[:3]:
+        for item in items[:1]:
             title = item.findtext("title", "").split(" - ")[0].strip()
             if title:
                 if not is_japanese:
@@ -324,31 +330,67 @@ def get_hawaii_news():
     except Exception:
         return "🏝️ ハワイニュース取得できなかったわ😭"
 
-# Suno残高（LINEコマンド「Suno 200」で更新）
-suno_state = {"balance": None, "updated_at": None}
+# Suno残高（LINEコマンド「Suno 2380 20」＝クレジット・ダウンロード残りで更新）
+suno_state = {"balance": None, "downloads": None, "updated_at": None}
+SUNO_RESET_DAY = 10
+SUNO_KEYWORDS = ["suno", "スーノ", "すーの", "すの", "スノ"]
 
 def _load_suno_from_sheets():
     try:
         bal = get_stat("suno_balance")
+        dl = get_stat("suno_downloads")
         upd = get_stat("suno_updated_at")
         if bal:
             suno_state["balance"] = int(bal)
+            suno_state["downloads"] = int(dl) if dl else None
             suno_state["updated_at"] = datetime.fromisoformat(upd) if upd else None
     except Exception:
         pass
+
+def _days_to_suno_reset(now):
+    """次の10日（リセット日）までの日数"""
+    reset = now.date().replace(day=SUNO_RESET_DAY)
+    if now.day >= SUNO_RESET_DAY:
+        reset = (reset.replace(day=1) + timedelta(days=32)).replace(day=SUNO_RESET_DAY)
+    return (reset - now.date()).days
+
+def _last_suno_reset(now):
+    """いちばん近い過去の10日（その日を含む）"""
+    d = now.date()
+    if d.day >= SUNO_RESET_DAY:
+        return d.replace(day=SUNO_RESET_DAY)
+    return (d.replace(day=1) - timedelta(days=1)).replace(day=SUNO_RESET_DAY)
+
+def parse_suno_command(text):
+    """「Suno 2380 20」「すの２，３８０」→ 数字のリスト。Sunoのコマンドでなければ None"""
+    t = unicodedata.normalize("NFKC", text).strip().lower().replace(",", "")
+    compact = t.replace(" ", "")
+    for k in SUNO_KEYWORDS:
+        if not compact.startswith(k):
+            continue
+        # 後ろが数字・区切り・決まった言葉だけのときだけコマンド（「すのこ買う」はメモに回す）
+        rest = compact[len(k):]
+        for w in ("クレジット", "ダウンロード", "dl", "回", "残高", "残り", "確認", "?"):
+            rest = rest.replace(w, "")
+        if re.fullmatch(r"[\d、/・]*", rest):
+            # キーワードに数字は無いので、文中の数字＝クレジット・ダウンロードの順（スペースで区切ったまま読む）
+            return [int(n) for n in re.findall(r"\d+", t)]
+    return None
 
 def get_suno_section():
     now = datetime.now(JST)
     if suno_state["balance"] is None:
         _load_suno_from_sheets()
     if suno_state["balance"] is None:
-        return "━━━ 🎵 Suno残高 ━━━\n  未設定　「Suno 200」みたいに送って！\n"
+        return "━━━ 🎵 Suno ━━━\n  未設定　「Suno 2380 20」みたいに送って！\n\n"
     bal = suno_state["balance"]
+    dl = suno_state["downloads"]
     updated = suno_state["updated_at"].strftime("%-m/%-d") if suno_state["updated_at"] else "?"
-    reset_day = 10
-    days_left = (reset_day - now.day) if now.day < reset_day else (reset_day + 30 - now.day)
-    bar = "🟩" * min(10, int(bal / 250)) + "⬜" * (10 - min(10, int(bal / 250)))
-    return f"━━━ 🎵 Suno残高 ━━━\n  {bar}\n  {bal}/2500クレジット（{updated}更新）\n  リセットまであと{days_left}日\n"
+    dl_text = f"ダウンロード：あと{dl}回" if dl is not None else "ダウンロード：未設定"
+    stale = "・リセット前の数字" if suno_state["updated_at"] and suno_state["updated_at"].date() < _last_suno_reset(now) else ""
+    return (f"━━━ 🎵 Suno ━━━\n"
+            f"  クレジット：{bal:,}／{dl_text}（{updated}更新{stale}）\n"
+            f"  リセット（毎月{SUNO_RESET_DAY}日）まであと{_days_to_suno_reset(now)}日\n\n")
 
 # ── 天気（wttr.in アカウント不要）────────────────────────────────
 WEATHER_EMOJI = {
@@ -619,12 +661,7 @@ def build_monthly_report():
     report_month = (now.replace(day=1) - timedelta(days=1)).strftime("%Y年%-m月")
     ig = get_monthly_ig_summary()
     return (f"📊 {report_month} 月次レポート 🍍\n\n{ig}\n\n"
-            f"━━━ 来月に向けて ━━━\n"
-            f"  • Reels投稿：月4本以上（シャトーブリアン）\n"
-            f"  • 投稿数：月10本以上をキープ\n"
-            f"  • 保存数アップ施策：希少性テキスト強化\n"
-            f"  • シェア誘発コンテンツ：「連れて行きたい人」訴求\n\n"
-            f"来月もいくぞ！🤙🏝️")
+            f"くわしい振り返りは5日の月次報告書メールでね！🤙🏝️")
 
 def send_to_user(text):
     try:
@@ -652,7 +689,6 @@ def run_scheduler():
     last_morning  = None
     last_reminder = None
     last_report   = None
-    last_yt_remind = None
 
     while True:
         now   = datetime.now(JST)
@@ -675,20 +711,6 @@ def run_scheduler():
             last_report = today
             if (now + timedelta(days=1)).day == 1:
                 send_to_user(build_monthly_report())
-
-        if now.hour == 13 and now.weekday() == 6 and last_yt_remind != today:
-            last_yt_remind = today
-            send_to_user(
-                "🎬 週次YouTubeデータ収集のお時間よ！BOSS🍍\n\n"
-                "① YouTube Studio を開く\n"
-                "   → studio.youtube.com\n\n"
-                "② アナリティクス → 詳細モード\n"
-                "   → 右上のダウンロードボタン\n"
-                "   → CSVを保存\n\n"
-                "③ ターミナルで実行\n"
-                "   python3 ~/Downloads/create_sheet.py\n\n"
-                "データが貯まるほど分析が深くなるよ！🤙"
-            )
 
         time.sleep(30)
 
@@ -804,22 +826,27 @@ def handle_message(event):
         else:
             lines = "\n".join(f"  {i+1}. {m[0]} {m[1] if len(m)>1 else ''}" for i, m in enumerate(memos[-10:]))
             reply = f"📝 メモ一覧（最新10件）\n\n{lines}\n\n削除は「メモ削除1」でどうぞ！"
-    elif any(text.lower().replace(" ", "").replace("　", "").startswith(k) for k in ["suno", "スーノ", "すーの", "すの", "スノ"]):
-        normalized = text.lower().replace(" ", "").replace("　", "").translate(str.maketrans("０１２３４５６７８９", "0123456789"))
-        num_str = ""
-        for k in ["suno", "スーノ", "すーの", "すの", "スノ"]:
-            if normalized.startswith(k):
-                num_str = normalized[len(k):]
-                break
-        if num_str.isdigit():
-            suno_state["balance"] = int(num_str)
+    elif parse_suno_command(text) is not None:
+        nums = parse_suno_command(text)
+        if nums:
+            suno_state["balance"] = nums[0]
             suno_state["updated_at"] = datetime.now(JST)
-            set_stat("suno_balance", num_str)
+            set_stat("suno_balance", nums[0])
             set_stat("suno_updated_at", suno_state["updated_at"].isoformat())
-            reply = f"🎵 Suno残高を{num_str}クレジットに更新したよ！3日おきに朝お知らせしますね🍍"
+            reply = f"🎵 Sunoを更新したよ！\n  クレジット：{nums[0]:,}"
+            if len(nums) >= 2:
+                suno_state["downloads"] = nums[1]
+                set_stat("suno_downloads", nums[1])
+                reply += f"\n  ダウンロード：あと{nums[1]}回"
+            reply += "\n作りだめしたいBGMがあったらソフィに言ってね🍍"
         else:
-            bal = suno_state["balance"]
-            reply = f"🎵 Suno残高：{bal}クレジットよ" if bal is not None else "🎵 Suno残高が未設定よ。「Suno 200」のように送ってね！"
+            if suno_state["balance"] is None:
+                _load_suno_from_sheets()
+            bal, dl = suno_state["balance"], suno_state["downloads"]
+            if bal is None:
+                reply = "🎵 Sunoが未設定よ。「Suno 2380 20」のように送ってね！"
+            else:
+                reply = f"🎵 Suno：クレジット{bal:,}" + (f"／ダウンロードあと{dl}回" if dl is not None else "") + "よ"
     elif text.startswith("予定") and not match(["予定確認", "予定削除"]):
         parts = text.split()
         if len(parts) >= 3:
@@ -876,7 +903,7 @@ def handle_message(event):
                  "「インスタ」→ 昨日のInstagram\n"
                  "「タスク」→ 今日のToDoリスト\n"
                  "「月報」→ 今月のまとめ\n"
-                 "「Suno 200」→ Suno残高を更新\n"
+                 "「Suno 2380 20」→ Sunoのクレジットとダウンロード残りを更新\n"
                  "「予定 4/25 撮影」→ 予定を登録\n"
                  "「予定確認」→ 登録済み一覧\n"
                  "「予定削除2」→ 予定を削除")
@@ -938,8 +965,6 @@ def morning_trigger():
             with concurrent.futures.ThreadPoolExecutor() as ex:
                 msg = ex.submit(build_morning_message).result(timeout=25)
             send_to_user(msg)
-            if datetime.now(JST).weekday() == 0:
-                send_image_to_user("https://raw.githubusercontent.com/pine-appleO/chris-bot/main/hf_20260510_135915_36ce56d3-a985-4dd2-89ff-d97cdbdbe79d.png")
         except Exception as e:
             send_to_user("アロハ🤙BOSS！ソフィよ！\n朝のまとめ取得中にエラーが出たわ😭\n「アロハ」って送ってみて！")
             print(f"[MORNING] error: {e}")
