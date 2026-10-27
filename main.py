@@ -46,6 +46,9 @@ USHIURARA_CAL_ID = os.environ.get(
 SHEET_TAB = "予定"
 MEMO_TAB = "メモ"
 STATS_TAB = "統計"
+# 「ソフィから」欄：集客ダッシュボードの先頭タブ。Mac の ~/bin/sofi-line-note.py が毎朝 6:40 に書く
+SOFI_NOTE_SHEET_ID = os.environ.get("SOFI_NOTE_SHEET_ID", "1kMA5OuDkCa5cAF3fwnrnvcgRqjBhNcFFlDbJogVpnfE")
+SOFI_NOTE_TAB = "🍍 ソフィからの連絡"
 
 configuration = Configuration(access_token=LINE_TOKEN)
 handler = WebhookHandler(LINE_SECRET)
@@ -236,6 +239,27 @@ def fmt_diff(current, prev_str):
     except Exception:
         return "?"
 
+def _norm_date(s):
+    """「2026-10-27」「2026/10/27」→ 2026-10-27（手で書いた日付も読めるように）"""
+    parts = re.split(r"[-/]", (s or "").strip())
+    if len(parts) == 3 and all(p.isdigit() for p in parts):
+        return f"{int(parts[0]):04d}-{int(parts[1]):02d}-{int(parts[2]):02d}"
+    return (s or "").strip()
+
+def get_sofi_notes(target_date):
+    """「ソフィからの連絡」タブのうち、その日の行の文を返す（読めなければ空）"""
+    if not GA4_SERVICE_ACCOUNT_JSON or not SOFI_NOTE_SHEET_ID:
+        return []
+    try:
+        rows = _sheets_service().spreadsheets().values().get(
+            spreadsheetId=SOFI_NOTE_SHEET_ID, range=f"'{SOFI_NOTE_TAB}'!A3:B"
+        ).execute().get("values", [])
+    except Exception as e:
+        print(f"[SOFI_NOTE] error: {e}")
+        return []
+    want = target_date.strftime("%Y-%m-%d")
+    return [r[1].strip() for r in rows if len(r) > 1 and r[1].strip() and _norm_date(r[0]) == want]
+
 def get_today_store_visit():
     today = datetime.now(JST).strftime("%Y-%m-%d")
     for v in get_store_visits():
@@ -399,6 +423,11 @@ WEATHER_EMOJI = {
     200: ("⛈️", "雷雨"), 386: ("⛈️", "雷雨"), 389: ("⛈️", "雷雨"),
     227: ("❄️", "雪"), 230: ("❄️", "吹雪"), 335: ("❄️", "雪"), 338: ("❄️", "大雪"),
     371: ("❄️", "大雪"), 377: ("❄️", "みぞれ"),
+    176: ("🌦️", "ところにより雨"), 263: ("🌦️", "霧雨"), 266: ("🌦️", "霧雨"),
+    179: ("🌨️", "ところにより雪"), 182: ("🌨️", "みぞれ"), 185: ("🌨️", "みぞれ"),
+    281: ("🌨️", "みぞれ"), 284: ("🌨️", "みぞれ"),
+    323: ("❄️", "小雪"), 326: ("❄️", "小雪"), 329: ("❄️", "雪"), 332: ("❄️", "雪"),
+    392: ("⛈️", "雷雪"), 395: ("⛈️", "雷雪"),
 }
 
 def get_weather(location, city_name):
@@ -614,9 +643,16 @@ def build_morning_message():
     event_section = f"\n━━━ 🍍 近日予定 ━━━\n{events}\n" if events else ""
     suno_section = get_suno_section()
 
+    notes = get_sofi_notes(now.date())
+    note_section = ""
+    if notes:
+        note_body = "\n".join(f"  • {n}" for n in notes)
+        note_section = f"━━━ 👩‍💼 ソフィから ━━━\n{note_body}\n\n"
+
     return (f"アロハ🤙 BOSS！ソフィよ！\n{date_str}\n\n"
             f"{yokohama}\n{sodegaura}\n"
             f"{event_section}\n"
+            f"{note_section}"
             f"{cal_section}"
             f"━━━ 今日のタスク ━━━\n{task_text}\n\n"
             f"{suno_section}"
@@ -646,6 +682,10 @@ def build_tomorrow_schedule():
 
     cal_tasks = get_calendar_tasks(tomorrow.date())
     msg = f"明日 {date_str} の予定 🏝️"
+    notes = get_sofi_notes(tomorrow.date())
+    if notes:
+        note_body = "\n".join(f"  • {n}" for n in notes)
+        msg += f"\n\n━━━ 👩‍💼 ソフィから ━━━\n{note_body}"
     if cal_tasks:
         cal_body = "\n".join(f"  • {t}" for t in cal_tasks)
         msg += f"\n\n━━━ 🥩 うしうらら運用 ━━━\n{cal_body}"
